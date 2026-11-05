@@ -15,7 +15,9 @@ export function verifyHandshake(msp: Pick<SpawnedMspConnection, 'initializeResul
   if (result.schema.fingerprint !== expected.schemaFingerprint || result.serverInfo.version !== expected.binaryVersion) throw Error('Muse handshake does not match the tested compatibility lock');
   if (!result.experimentalApi) throw Error('Muse did not negotiate experimental permission-profile readback');
   if (readSessionDurability(result).kind !== 'durable') throw Error('BranchPilot requires durable Muse sessions for accounting and recovery');
-  if (result.sandboxAvailability === 'unavailable') throw Error(`Muse cannot enforce its sandbox: ${result.sandboxUnavailableReason ?? 'reason unavailable'}`);
+  if (expected.isolationAuthority === 'branchpilot-sandbox-exec') {
+    record('muse.isolation_authority', { authority: expected.isolationAuthority, hostSandboxAvailability: result.sandboxAvailability });
+  } else if (result.sandboxAvailability === 'unavailable') throw Error(`Muse cannot enforce its sandbox: ${result.sandboxUnavailableReason ?? 'reason unavailable'}`);
 }
 
 const sessionSchema = z.object({

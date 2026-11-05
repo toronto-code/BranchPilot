@@ -1,10 +1,10 @@
-# Muse research and offline compatibility audit
+# Muse compatibility audit
 
-Checked November 4, 2026. This audit used Meta's public documentation, its official SDK repository, npm package metadata, and the installed SDK's code/types. No Muse executable, account login, provider request, or live compatibility experiment was run.
+Updated November 5, 2026. The initial research used Meta documentation and the pinned SDK. Live testing has now exercised Muse 1.4.14: authenticated Wonder calls, explicit model/effort readback, a real file edit, matching root/provider usage in the smoke test, and outside-file read/write denial. See [live results](live-muse-results.md) for measured scope and remaining gates.
 
 ## What Muse means here
 
-Muse Code is the terminal/CI coding agent. BranchPilot controls that agent through the Muse Session Protocol (MSP), using `muse serve` and the TypeScript SDK. It does not call Meta's model API directly. [Meta's Muse Code overview](https://dev.meta.ai/docs/muse-code).
+Muse Code is the terminal/CI coding agent. BranchPilot controls that agent through the Muse Session Protocol (MSP), using `muse serve` and the TypeScript SDK. Muse constructs the model requests. The optional benchmark gateway forwards only priced Wonder text requests to Meta and accounts for them before dispatch. [Meta's Muse Code overview](https://dev.meta.ai/docs/muse-code).
 
 Meta lists Muse Spark 1.3 (`muse-spark-1.3`) for cost/latency-sensitive agentic work and Muse Wonder (`muse-wonder-1.0`) for complex, long-running software work. Both have a documented 1,048,576-token context window. Wonder Full is a separate Muse Code subscription variant; raising Wonder's reasoning effort does not select Full. These are Meta's product descriptions, not BranchPilot measurements. [Meta's model catalog](https://dev.meta.ai/docs/models).
 
@@ -14,7 +14,7 @@ BranchPilot supports host defaults, an exact provider/model, or an ordered prefe
 
 The official source and npm metadata reported SDK **1.4.14**. The repo now pins that exact version in both package files and the adapter. Meta recommends pairing SDK/runtime versions and checking changes before upgrading. Its source mirror's publish anchor also names host 1.4.14; the fetched general changelog still starts at 1.4.2, so it does not establish patch-specific runtime behavior. [SDK package source](https://github.com/meta-models/muse-code-sdk/blob/main/clients/sdk-ts/package.json), [pairing policy](https://github.com/meta-models/muse-code-sdk), [publish anchor](https://github.com/meta-models/muse-code-sdk/blob/main/publish-anchor.json), [changelog](https://github.com/meta-models/muse-code-sdk/blob/main/CHANGELOG.md).
 
-The SDK's embedded stable-schema fingerprint is `sha256:c94c3d1f2f51e6424074b9ec43eac3eedcf532d3dcd77351ec1383a87d3049c6`. That is an SDK identity, not a fabricated observation of an installed host. Public documentation snapshots can describe different generated schemas. Obtain the actual served fingerprint during future authorized verification.
+The SDK's embedded stable-schema fingerprint is `sha256:c94c3d1f2f51e6424074b9ec43eac3eedcf532d3dcd77351ec1383a87d3049c6`. The installed 1.4.14 host also served this fingerprint during live initialization. Its offline experimental schema export differs; the lock uses the observed served fingerprint and exact binary digest.
 
 The SDK treats its own fingerprint mismatch as advisory. BranchPilot now records that warning, while still requiring the served version/fingerprint and binary digest to match the independently verified run lock. This also avoids confusing the SDK's stable-schema pin with a negotiated experimental surface. [Compatibility policy](https://meta-models.github.io/muse-code-sdk/1.4/compatibility/).
 
@@ -26,7 +26,7 @@ The `permissionState` readback used by `requirePermissionProfile` is absent from
 |---|---|
 | Model/effort changes | Wait for application after acknowledgement, then verify settings before sending the prompt; waiting is bounded and cancellable. |
 | Permissions | Explicit experimental negotiation, SDK profile confirmation, and approval-mode/workspace readback. |
-| Durability | Reject ephemeral and unknown durability profiles before model work. Hosts reporting unavailable sandbox enforcement also fail before a turn. |
+| Durability | Reject ephemeral and unknown durability profiles before model work. An unavailable host sandbox fails unless the caller explicitly supplies BranchPilot's tested outer OS boundary; macOS cannot nest Seatbelt profiles. |
 | SDK identity | Hash all runtime JavaScript modules, and freeze that identity with the run's backend manifest. |
 | Authentication | Optional `backend.apiKeyEnv: "META_API_KEY"`; retain runtime-home authentication by default. Never serialize the key value. |
 | Environment | Explicit HOME, XDG configuration/data paths, and scratch directory; unrelated ambient variables are excluded. |
@@ -59,7 +59,7 @@ The child process uses `runtimeHome/.config` and `runtimeHome/.local/share` for 
 
 The original compatibility pass had **182 passing offline tests**, including delayed settings, experimental negotiation refusal, missing permission evidence, wrong approval mode, advisory fingerprints, cancellation during setup, all supported child-work detection paths, persistent liabilities, environment handling, and the owned-host continuation block. Subsequent frontier-policy and handoff validation is recorded in [release status](release.md). The suite exercises the real SDK over synthetic frames, plus actual local fixture evaluation. It cannot establish real provider behavior.
 
-The outstanding live gate is the exact SDK/binary pair: authentication, advertised catalog, chosen settings, permissions, an actual file edit and external check, complete root-work usage, cancellation/descendant termination, filesystem containment, and retained recovery. Concurrent hosts remain separately gated. No lock was marked verified and no smoke case was executed against Muse.
+The tested installation now has real completion and containment evidence. Each benchmark attempt receives a fresh session home with pinned settings, six local coding tools, disabled reminders, capacity one, and contributor mode off. The live pilot can create an installation-specific lock only after checking that evidence and the native configuration log. `promptUnmatched` supports exact, explicitly listed shell commands under the outer OS boundary; all other requests are denied. Durable recovery, user-input continuation, concurrent hosts, and arbitrary native child work remain gated. A safely stopped, fully accounted token/time checkpoint can be graded as code; user cancellations and uncertain work cannot.
 
 **Question continuation needs a transport change as well as testing.** Meta documents that closing the stdio host cancels active turns. The current CLI owns and closes a host per operation, so a later `answer` cannot assume that a pending turn survived. Setting `questionContinuationVerified` cannot enable this path. The existing answer engine is retained for offline protocol tests/future persistent-host integration; production execution declines dialogs and cancels unexpected requests. Read-only reconciliation remains separately gated. [Host shutdown contract](https://meta-models.github.io/muse-code-sdk/1.4/guides/host-operations/).
 

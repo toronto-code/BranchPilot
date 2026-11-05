@@ -106,4 +106,6 @@ All workload evidence matched exactly: frontier identity/order, replay equality,
 
 Raw results: `.branchpilot/performance/comparison-original/results.json` and `.branchpilot/performance/comparison-current/results.json`. Original implementation SHA-256: `7e70201cd1f9d7386313f2eb3d76275403e4f79444cff255d3766b80caa6bf08`; current: `6fde948d8fac6897abe18fa55be89fbe07cc1f8886b72b0f8efd295ab67167e5`.
 
+The [live Muse report](live-muse-results.md) now records a separate real comparison: tied correctness on four fresh tasks, 9.2% fewer tokens and 12.3% lower elapsed time in one pilot. Those observations do not establish a general speed or quality gain.
+
 The [paired benchmark guide](benchmark-guide.md) describes the separate one-hour-per-version model-quality experiment. Its included fixture example proves workflow mechanics and explicitly cannot pass the model-quality improvement gate.

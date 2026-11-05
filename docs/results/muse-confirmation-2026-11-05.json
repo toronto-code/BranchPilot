@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "planId": "b966aacb-36b9-4e05-9d5d-8c0846bcb561",
+  "dataset": "branchpilot-confirmation-coding-pilot",
+  "datasetRevision": "20d02a57d54e0c02b144b8deb3b52208afface1dff5918d655eeb0194642703c",
+  "simulated": false,
+  "armSeconds": 3600,
+  "taskSeconds": 240,
+  "implementation": "e512939bb37a0546c061eec324962f9a4a8d2b398ecadd379daf4a94831abeca",
+  "outcomes": {
+    "tasks": 4,
+    "baselineSolved": 4,
+    "candidateSolved": 4,
+    "wins": 0,
+    "losses": 0,
+    "ties": 4,
+    "deltaPercentagePoints": 0,
+    "exactTwoSidedP": 1,
+    "denominator": "all planned tasks; missing or ungraded entries are not successes"
+  },
+  "totals": {
+    "baseline": {
+      "tokens": 510169,
+      "workSeconds": 133.278,
+      "seconds": 136.736853041
+    },
+    "candidate": {
+      "tokens": 463182,
+      "workSeconds": 116.691,
+      "seconds": 119.94608500000002
+    }
+  },
+  "comparable": true,
+  "modelQualityImproved": false,
+  "verdict": "improvement_not_established",
+  "qualityReasons": [],
+  "pairs": [
+    {
+      "caseId": "json-pointer",
+      "baseline": {
+        "caseId": "json-pointer",
+        "solved": true,
+        "reasons": [],
+        "seconds": 45.536814291999995,
+        "spent": {
+          "tokens": 150190,
+          "workSeconds": 44.85999999999999,
+          "attempts": 1,
+          "experiments": 4
+        },
+        "modelIdentity": "[\"meta\",\"muse-wonder-1.0\",\"max\"]",
+        "backendIdentity": "391346088a6fee19b7fc44ec1e3cc740da793644121237e9bfeb17aa6988a332"
+      },
+      "candidate": {
+        "caseId": "json-pointer",
+        "solved": true,
+        "reasons": [],
+        "seconds": 55.81839825,
+        "spent": {
+          "tokens": 143810,
+          "workSeconds": 55.211000000000006,
+          "attempts": 1,
+          "experiments": 4
+        },
+        "modelIdentity": "[\"meta\",\"muse-wonder-1.0\",\"max\"]",
+        "backendIdentity": "391346088a6fee19b7fc44ec1e3cc740da793644121237e9bfeb17aa6988a332"
+      },
+      "reasons": []
+    },
+    {
+      "caseId": "merge-intervals",
+      "baseline": {
+        "caseId": "merge-intervals",
+        "solved": true,
+        "reasons": [],
+        "seconds": 23.293326374999996,
+        "spent": {
+          "tokens": 124083,
+          "workSeconds": 22.625000000000004,
+          "attempts": 1,
+          "experiments": 4
+        },
+        "modelIdentity": "[\"meta\",\"muse-wonder-1.0\",\"max\"]",
+        "backendIdentity": "391346088a6fee19b7fc44ec1e3cc740da793644121237e9bfeb17aa6988a332"
+      },
+      "candidate": {
+        "caseId": "merge-intervals",
+        "solved": true,
+        "reasons": [],
+        "seconds": 16.97002233400001,
+        "spent": {
+          "tokens": 104630,
+          "workSeconds": 16.288999999999998,
+          "attempts": 1,
+          "experiments": 4
+        },
+        "modelIdentity": "[\"meta\",\"muse-wonder-1.0\",\"max\"]",
+        "backendIdentity": "391346088a6fee19b7fc44ec1e3cc740da793644121237e9bfeb17aa6988a332"
+      },
+      "reasons": []
+    },
+    {
+      "caseId": "utf8-truncate",
+      "baseline": {
+        "caseId": "utf8-truncate",
+        "solved": true,
+        "reasons": [],
+        "seconds": 26.464616041999996,
+        "spent": {
+          "tokens": 150465,
+          "workSeconds": 25.789,
+          "attempts": 1,
+          "experiments": 4
+        },
+        "modelIdentity": "[\"meta\",\"muse-wonder-1.0\",\"max\"]",
+        "backendIdentity": "391346088a6fee19b7fc44ec1e3cc740da793644121237e9bfeb17aa6988a332"
+      },
+      "candidate": {
+        "caseId": "utf8-truncate",
+        "solved": true,
+        "reasons": [],
+        "seconds": 16.80011262499998,
+        "spent": {
+          "tokens": 83371,
+          "workSeconds": 16.183999999999997,
+          "attempts": 1,
+          "experiments": 4
+        },
+        "modelIdentity": "[\"meta\",\"muse-wonder-1.0\",\"max\"]",
+        "backendIdentity": "391346088a6fee19b7fc44ec1e3cc740da793644121237e9bfeb17aa6988a332"
+      },
+      "reasons": []
+    },
+    {
+      "caseId": "async-memo",
+      "baseline": {
+        "caseId": "async-memo",
+        "solved": true,
+        "reasons": [],
+        "seconds": 40.68866279199999,
+        "spent": {
+          "tokens": 85431,
+          "workSeconds": 40.004,
+          "attempts": 1,
+          "experiments": 4
+        },
+        "modelIdentity": "[\"meta\",\"muse-wonder-1.0\",\"max\"]",
+        "backendIdentity": "391346088a6fee19b7fc44ec1e3cc740da793644121237e9bfeb17aa6988a332"
+      },
+      "candidate": {
+        "caseId": "async-memo",
+        "solved": true,
+        "reasons": [],
+        "seconds": 29.645191249999975,
+        "spent": {
+          "tokens": 131371,
+          "workSeconds": 29.007000000000005,
+          "attempts": 1,
+          "experiments": 4
+        },
+        "modelIdentity": "[\"meta\",\"muse-wonder-1.0\",\"max\"]",
+        "backendIdentity": "391346088a6fee19b7fc44ec1e3cc740da793644121237e9bfeb17aa6988a332"
+      },
+      "reasons": []
+    }
+  ],
+  "note": "A small selected subset is a pilot, not a full benchmark score. Repeat on a fresh frozen subset; do not tune on final tests. Statistical evidence does not establish universal superiority."
+}

@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "planId": "790ffc6f-f12b-42e1-9c4d-d9c0bcdcda8b",
+  "dataset": "branchpilot-original-coding-pilot",
+  "datasetRevision": "a86b96ca1712d363eb673a249bd2ee6c65a1d45b4337f3f3231c848df32b2786",
+  "simulated": false,
+  "armSeconds": 3600,
+  "taskSeconds": 240,
+  "implementation": "ed182312bca3e15d0c944f705c44da43d116cb6cb7c47528fb1035ad4bb5d3cc",
+  "outcomes": {
+    "tasks": 4,
+    "baselineSolved": 4,
+    "candidateSolved": 0,
+    "wins": 0,
+    "losses": 4,
+    "ties": 0,
+    "deltaPercentagePoints": -100,
+    "exactTwoSidedP": 0.125,
+    "denominator": "all planned tasks; missing or ungraded entries are not successes"
+  },
+  "totals": {
+    "baseline": {
+      "tokens": 379971,
+      "workSeconds": 106.87700000000001,
+      "seconds": 110.32885258399999
+    },
+    "candidate": {
+      "tokens": 529736,
+      "workSeconds": 141.814,
+      "seconds": 145.04854858399997
+    }
+  },
+  "comparable": true,
+  "modelQualityImproved": false,
+  "verdict": "improvement_not_established",
+  "qualityReasons": [],
+  "pairs": [
+    {
+      "caseId": "lru-cache",
+      "baseline": {
+        "caseId": "lru-cache",
+        "solved": true,
+        "reasons": [],
+        "seconds": 18.3310125,
+        "spent": {
+          "tokens": 82726,
+          "workSeconds": 17.717999999999996,
+          "attempts": 1,
+          "experiments": 4
+        },
+        "modelIdentity": "[\"meta\",\"muse-wonder-1.0\",\"max\"]",
+        "backendIdentity": "02a6d0145820f991ae5fc5d2f20ec15ae4797be9df4e82978dac7bba3fea124a"
+      },
+      "candidate": {
+        "caseId": "lru-cache",
+        "solved": false,
+        "reasons": [],
+        "seconds": 40.16752725,
+        "spent": {
+          "tokens": 138197,
+          "workSeconds": 39.635,
+          "attempts": 1,
+          "experiments": 2
+        },
+        "modelIdentity": "[\"meta\",\"muse-wonder-1.0\",\"max\"]",
+        "backendIdentity": "02a6d0145820f991ae5fc5d2f20ec15ae4797be9df4e82978dac7bba3fea124a"
+      },
+      "reasons": []
+    },
+    {
+      "caseId": "topological-order",
+      "baseline": {
+        "caseId": "topological-order",
+        "solved": true,
+        "reasons": [],
+        "seconds": 19.573571666999996,
+        "spent": {
+          "tokens": 82180,
+          "workSeconds": 18.866,
+          "attempts": 1,
+          "experiments": 4
+        },
+        "modelIdentity": "[\"meta\",\"muse-wonder-1.0\",\"max\"]",
+        "backendIdentity": "02a6d0145820f991ae5fc5d2f20ec15ae4797be9df4e82978dac7bba3fea124a"
+      },
+      "candidate": {
+        "caseId": "topological-order",
+        "solved": false,
+        "reasons": [],
+        "seconds": 33.103520792,
+        "spent": {
+          "tokens": 129906,
+          "workSeconds": 32.484,
+          "attempts": 1,
+          "experiments": 2
+        },
+        "modelIdentity": "[\"meta\",\"muse-wonder-1.0\",\"max\"]",
+        "backendIdentity": "02a6d0145820f991ae5fc5d2f20ec15ae4797be9df4e82978dac7bba3fea124a"
+      },
+      "reasons": []
+    },
+    {
+      "caseId": "ndjson-stream",
+      "baseline": {
+        "caseId": "ndjson-stream",
+        "solved": true,
+        "reasons": [],
+        "seconds": 29.49691625,
+        "spent": {
+          "tokens": 106041,
+          "workSeconds": 28.839,
+          "attempts": 1,
+          "experiments": 4
+        },
+        "modelIdentity": "[\"meta\",\"muse-wonder-1.0\",\"max\"]",
+        "backendIdentity": "02a6d0145820f991ae5fc5d2f20ec15ae4797be9df4e82978dac7bba3fea124a"
+      },
+      "candidate": {
+        "caseId": "ndjson-stream",
+        "solved": false,
+        "reasons": [],
+        "seconds": 39.931590916999994,
+        "spent": {
+          "tokens": 132976,
+          "workSeconds": 39.326,
+          "attempts": 1,
+          "experiments": 2
+        },
+        "modelIdentity": "[\"meta\",\"muse-wonder-1.0\",\"max\"]",
+        "backendIdentity": "02a6d0145820f991ae5fc5d2f20ec15ae4797be9df4e82978dac7bba3fea124a"
+      },
+      "reasons": []
+    },
+    {
+      "caseId": "async-pool",
+      "baseline": {
+        "caseId": "async-pool",
+        "solved": true,
+        "reasons": [],
+        "seconds": 42.129043958,
+        "spent": {
+          "tokens": 109024,
+          "workSeconds": 41.454,
+          "attempts": 1,
+          "experiments": 4
+        },
+        "modelIdentity": "[\"meta\",\"muse-wonder-1.0\",\"max\"]",
+        "backendIdentity": "02a6d0145820f991ae5fc5d2f20ec15ae4797be9df4e82978dac7bba3fea124a"
+      },
+      "candidate": {
+        "caseId": "async-pool",
+        "solved": false,
+        "reasons": [],
+        "seconds": 31.084327749999996,
+        "spent": {
+          "tokens": 128657,
+          "workSeconds": 30.368999999999996,
+          "attempts": 1,
+          "experiments": 2
+        },
+        "modelIdentity": "[\"meta\",\"muse-wonder-1.0\",\"max\"]",
+        "backendIdentity": "02a6d0145820f991ae5fc5d2f20ec15ae4797be9df4e82978dac7bba3fea124a"
+      },
+      "reasons": []
+    }
+  ],
+  "note": "A small selected subset is a pilot, not a full benchmark score. Repeat on a fresh frozen subset; do not tune on final tests. Statistical evidence does not establish universal superiority."
+}

@@ -29,7 +29,7 @@
   },
   "budget": {
     "total": {
-      "tokens": 256000,
+      "tokens": 960000,
       "workSeconds": 8000,
       "attempts": 4,
       "experiments": 20
@@ -37,7 +37,7 @@
     "wallSeconds": 10800,
     "maxConcurrency": 1,
     "perAttempt": {
-      "tokenReservation": 64000,
+      "tokenReservation": 240000,
       "timeoutSeconds": 1800
     },
     "finalizationReserve": {

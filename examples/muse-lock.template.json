@@ -8,6 +8,7 @@
   "permissionProfile": "UNVERIFIED",
   "approvalMode": "denyUnmatched",
   "isolationVerified": false,
+  "isolationAuthority": "branchpilot-sandbox-exec",
   "untrackedWorkersDisabled": false,
   "usageIncludesAllWork": false
 }

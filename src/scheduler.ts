@@ -212,9 +212,17 @@ export class Scheduler {
       }
       stopped = true;
       let revision: Revision | undefined;
-      if (result.outcome === 'completed') {
-        const output = candidateOutput(work.workspace, result, state.config.task.type === 'idea', state.config.backend.kind === 'muse');
-        revision = { id: work.outputRevisionId ?? id(), candidateId, parentIds: [base.id], ...(retry ? { previousId: base.id } : {}), snapshot: capture(this.store, work.workspace), ...output, depth: base.depth + 1, attemptId: work.id, createdAt: work.preparedAt ?? work.startedAt! };
+      // A local attempt allowance is a checkpoint, not a user cancellation.
+      // Grade the actual files only after confirmed stop and complete usage;
+      // keep the cancelled outcome and never treat the model's claims as proof.
+      const checkpoint = result.outcome === 'cancelled' && state.config.task.type === 'code'
+        && controller.signal.aborted && !this.signal.aborted && actual.tokens !== null && !work.untrackedWork;
+      if (result.outcome === 'completed' || checkpoint) {
+        const output = checkpoint ? { proposal: base.proposal, hypotheses: base.hypotheses }
+          : candidateOutput(work.workspace, result, state.config.task.type === 'idea', state.config.backend.kind === 'muse');
+        const snapshot = capture(this.store, work.workspace);
+        if (!checkpoint || snapshot !== base.snapshot) revision = { id: work.outputRevisionId ?? id(), candidateId, parentIds: [base.id], ...(retry ? { previousId: base.id } : {}), snapshot, ...output, depth: base.depth + 1, attemptId: work.id, createdAt: work.preparedAt ?? work.startedAt! };
+        if (checkpoint) this.store.append({ type: 'backend.event', workId, kind: 'attempt.checkpoint', artifact: this.store.putJSON({ revisionId: revision?.id, snapshot, unchanged: !revision, reason: String(controller.signal.reason), modelOutcome: result.outcome, requiresExternalGrading: Boolean(revision) }) });
       } else {
         this.store.append({ type: 'backend.event', workId, kind: 'partial_snapshot', artifact: capture(this.store, work.workspace) });
       }

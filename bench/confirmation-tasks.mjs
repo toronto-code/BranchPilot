@@ -1,0 +1,36 @@
+// Frozen after infrastructure debugging, before any model runs on these tasks.
+// These original exercises are a fresh functional confirmation, not a leaderboard.
+export const pilotTasks = [
+  {
+    id: 'json-pointer',
+    goal: 'Implement getPointer(document, pointer) in index.mjs. Follow JSON Pointer: empty pointer returns document; nonempty pointers must start with /; split on / and decode ~1 as / and ~0 as ~ in that order. Invalid ~ escapes or missing leading / throw SyntaxError. Resolve own object properties only, including empty and prototype-like names. In arrays accept only canonical nonnegative decimal indices (0 or a nonzero digit followed by digits); no leading zeros, minus sign, or dash. Missing paths, scalar traversal, and out-of-range array indices return undefined. Do not mutate document.',
+    stub: 'export function getPointer(document, pointer) { return document[pointer]; }',
+    development: `assert.equal(m.getPointer({a:{b:3}},'/a/b'),3);assert.equal(m.getPointer({'a/b':{'~key':4}},'/a~1b/~0key'),4);const d={x:1};assert.equal(m.getPointer(d,''),d);assert.equal(m.getPointer([8,9],'/1'),9);`,
+    heldOut: `const d=JSON.parse('{"":7,"__proto__":{"x":2},"~1":5}');assert.equal(m.getPointer(d,'/'),7);assert.equal(m.getPointer(d,'/__proto__/x'),2);assert.equal(m.getPointer(d,'/~01'),5);assert.equal(m.getPointer({},'/toString'),undefined);for(const p of ['/01','/-1','/-','/2'])assert.equal(m.getPointer([8,9],p),undefined);for(const p of ['x','/~2','/~'])assert.throws(()=>m.getPointer({},p),SyntaxError);assert.equal(m.getPointer({a:null},'/a/b'),undefined);assert.equal(m.getPointer({a:0},'/a/b'),undefined);assert.equal(m.getPointer({a:{b:false}},'/a/b'),false);`,
+    reference: `export function getPointer(d,p){if(p==='')return d;if(!p.startsWith('/'))throw new SyntaxError();const keys=p.slice(1).split('/').map(k=>{if(/~(?![01])/.test(k))throw new SyntaxError();return k.replaceAll('~1','/').replaceAll('~0','~')});for(const k of keys){if(d===null||typeof d!=='object'||Array.isArray(d)&&(!/^(0|[1-9][0-9]*)$/.test(k)||Number(k)>=d.length)||!Object.hasOwn(d,k))return undefined;d=d[k]}return d}`,
+  },
+  {
+    id: 'merge-intervals',
+    goal: 'Implement mergeIntervals(intervals) in index.mjs. Input is an array of two-element [start,end] arrays of finite numbers with start <= end. Invalid intervals throw RangeError, including wrong lengths or nonnumeric endpoints. Return closed intervals sorted by start, merging overlaps and intervals that touch at an endpoint. Include zero-length intervals, negative values, and fractions. Empty input returns []. Do not mutate the input or reuse its inner arrays in the result.',
+    stub: 'export function mergeIntervals(intervals) { return intervals; }',
+    development: `assert.deepEqual(m.mergeIntervals([[5,8],[1,3],[2,6],[10,11]]),[[1,8],[10,11]]);assert.deepEqual(m.mergeIntervals([[1,2],[2,3]]),[[1,3]]);assert.deepEqual(m.mergeIntervals([]),[]);`,
+    heldOut: `const a=[[3,3],[-2,-1],[-1,0],[0.5,0.75],[0.6,2],[1,1]];const copy=JSON.stringify(a);const out=m.mergeIntervals(a);assert.deepEqual(out,[[-2,0],[0.5,2],[3,3]]);assert.equal(JSON.stringify(a),copy);out[0][0]=99;assert.equal(JSON.stringify(a),copy);assert.deepEqual(m.mergeIntervals([[1,10],[2,3],[1,10]]),[[1,10]]);for(const x of [[[2,1]],[[1,Infinity]],[[NaN,2]],[[1]],[[1,2,3]],[['1',2]],[null]])assert.throws(()=>m.mergeIntervals(x),RangeError);`,
+    reference: `export function mergeIntervals(a){for(const r of a)if(!Array.isArray(r)||r.length!==2||!r.every(Number.isFinite)||r[0]>r[1])throw new RangeError();const sorted=a.map(r=>[...r]).sort((a,b)=>a[0]-b[0]);const out=[];for(const r of sorted){const last=out.at(-1);if(last&&r[0]<=last[1])last[1]=Math.max(last[1],r[1]);else out.push(r)}return out}`,
+  },
+  {
+    id: 'utf8-truncate',
+    goal: 'Implement truncateUTF8(text, maxBytes) in index.mjs. For a well-formed Unicode string, return the longest prefix whose UTF-8 encoding uses at most maxBytes bytes, without splitting a Unicode code point. maxBytes must be a nonnegative integer; otherwise throw RangeError. Preserve original characters and combining marks without normalization; a combining mark is its own code point. Empty text or a zero limit returns an empty string. Use byte size, not UTF-16 string length.',
+    stub: 'export function truncateUTF8(text, maxBytes) { return text.slice(0,maxBytes); }',
+    development: `assert.equal(m.truncateUTF8('aé😀z',3),'aé');assert.equal(m.truncateUTF8('aé😀z',6),'aé');assert.equal(m.truncateUTF8('aé😀z',7),'aé😀');assert.equal(m.truncateUTF8('abc',2),'ab');`,
+    heldOut: `for(const n of [-1,0.2,NaN,Infinity])assert.throws(()=>m.truncateUTF8('x',n),RangeError);assert.equal(m.truncateUTF8('😀',3),'');assert.equal(m.truncateUTF8('漢字',5),'漢');assert.equal(m.truncateUTF8('e\u0301!',2),'e');assert.equal(m.truncateUTF8('e\u0301!',3),'e\u0301');assert.equal(m.truncateUTF8('abc',99),'abc');assert.equal(m.truncateUTF8('',3),'');assert.equal(m.truncateUTF8('x',0),'');const s='aé漢😀z';for(let limit=0;limit<15;limit++){let expected='';for(const c of s){if(Buffer.byteLength(expected+c)>limit)break;expected+=c}assert.equal(m.truncateUTF8(s,limit),expected)}`, 
+    reference: `export function truncateUTF8(s,n){if(!Number.isInteger(n)||n<0)throw new RangeError();let out='',bytes=0;for(const c of s){const b=Buffer.byteLength(c);if(bytes+b>n)break;out+=c;bytes+=b}return out}`,
+  },
+  {
+    id: 'async-memo',
+    goal: 'Implement memoizeAsync(fn) in index.mjs. Return a function accepting one key, using Map key identity (including objects, NaN, and undefined). Concurrent calls for the same key must return the exact same Promise and invoke fn once. Cache successful results, including undefined. If fn throws synchronously or returns a rejected promise, reject callers and evict that key so a later call retries. Accept synchronous results and thenables. Different keys are independent. fn need not be called synchronously. Do not turn a rejection into a success and prevent unhandled rejections from internal cleanup.',
+    stub: 'export function memoizeAsync(fn) { return async key => fn(key); }',
+    development: `let calls=0;const f=m.memoizeAsync(async k=>{calls++;await new Promise(r=>setTimeout(r,2));return k*2});const p=f(3),q=f(3);assert.equal(p,q);assert.equal(await p,6);assert.equal(await f(3),6);assert.equal(calls,1);`,
+    heldOut: `let calls=0;const err=Error('retry');const f=m.memoizeAsync(k=>{calls++;if(calls===1)throw err;return k});const p=f('a'),q=f('a');p.catch(()=>{});q.catch(()=>{});assert.equal(p,q);await assert.rejects(p,e=>e===err);assert.equal(await f('a'),'a');assert.equal(calls,2);let count=0;const g=m.memoizeAsync(()=>{count++;return undefined});const obj={};for(const k of [obj,NaN,undefined]){assert.equal(await g(k),undefined);assert.equal(await g(k),undefined)}assert.equal(count,3);let attempts=0;const h=m.memoizeAsync(()=>{attempts++;return attempts===1?Promise.reject(err):{then:resolve=>resolve(4)}});await assert.rejects(h(0),e=>e===err);assert.equal(await h(0),4);assert.equal(attempts,2);`,
+    reference: `export function memoizeAsync(fn){const cache=new Map();return k=>{if(cache.has(k))return cache.get(k);const p=Promise.resolve().then(()=>fn(k));cache.set(k,p);p.catch(()=>{if(cache.get(k)===p)cache.delete(k)});return p}}`,
+  },
+];

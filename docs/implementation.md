@@ -1,6 +1,6 @@
 # Implementation status
 
-The original architecture is the broader target. The CLI MVP has an offline release workflow; see [release scope](release.md). Last implementation update: November 4, 2026. Real Muse compatibility remains unverified. The [research pass](research-improvements.md) adds frontier preferences, confirmed-setting reports, bounded branch handoffs, diverse alternative prompts, and an automatic escape from repeated failed retries. The [comparison runner](benchmark-guide.md) adds frozen task plans, one-hour per-version defaults, direct-versus-search controls, accounting/model identity checks, and a conservative paired improvement gate. All 214 offline tests pass; public dataset/container adapters and live model-quality measurements remain outstanding.
+Updated November 5, 2026. The CLI now has a tested serial Muse 1.4.14 path with Wonder max, per-attempt isolated homes, exact-command approvals, a request-level spending guard, and grading/continuation of safely stopped budget checkpoints. All 231 regression tests pass. A fresh live pilot tied 4/4 on correctness while using 9.2% fewer tokens and 12.3% less elapsed time; these are single-pilot observations. [Full live results, earlier failures, and remaining gates](live-muse-results.md). Earlier sections below retain their historical verification scope; their statements that Muse had not run are superseded by this update.
 
 ## Implemented and exercised offline
 

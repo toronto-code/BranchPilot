@@ -29,15 +29,15 @@
   },
   "budget": {
     "total": {
-      "tokens": 10000,
+      "tokens": 360000,
       "workSeconds": 300,
-      "attempts": 10,
+      "attempts": 3,
       "experiments": 30
     },
     "wallSeconds": 600,
     "maxConcurrency": 1,
     "perAttempt": {
-      "tokenReservation": 2000,
+      "tokenReservation": 120000,
       "timeoutSeconds": 60
     },
     "finalizationReserve": {
@@ -46,7 +46,7 @@
       "attempts": 0,
       "experiments": 0
     },
-    "cancellationGraceSeconds": 0.2,
+    "cancellationGraceSeconds": 3,
     "missingUsage": "hold-reservation-and-pause"
   },
   "execution": {

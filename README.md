@@ -2,11 +2,11 @@
 
 A local TypeScript controller for budgeted coding and experiment search. It owns candidate snapshots, external evaluation, strategy decisions, accounting, checkpoints, and reports.
 
-**The CLI MVP runs offline end to end.** Its fixture backend applies predetermined edits; it does not call a coding model. External evaluators actually execute against those edits. The Muse adapter compiles against the pinned `@muse-code/sdk` 1.4.14, but has **not been tested with a Muse runtime**. No verified compatibility lock is shipped. See [release scope and acceptance](docs/release.md).
+**The CLI runs offline and with a live Muse 1.4.14 runtime.** The pinned SDK/runtime pair has completed a real edit with reported usage and an OS isolation probe. A guarded coding pilot exercises Wonder at max effort with external development and hidden grading. Verified locks are specific to the tested installation; the shipped template remains deliberately invalid. See [live results and limitations](docs/live-muse-results.md) and [release scope](docs/release.md).
 
 For difficult Muse work, start with [the frontier template](examples/muse-frontier.template.json): prefer an advertised **Muse Wonder Full**, allow **Wonder** as an explicit fallback, and use the highest advertised known reasoning effort. It never falls back to Spark. Actual runtime IDs, entitlement, and settings still need verification. See [model policy and research-inspired improvements](docs/research-improvements.md).
 
-For comparisons, the [benchmark guide](docs/benchmark-guide.md) defaults to **up to one hour per version**: one direct Muse attempt versus up to three BranchPilot attempts per task, with matching model and total allowances. `compare-plan`, `compare-run`, and `compare-report` freeze tasks and check paired results. The current benchmark campaign is authorized for **less than CAD 150 combined**, including setup and reruns; token cancellation is not a hard dollar cap, and paid execution still needs verified spending controls. Fixture improvements, incomplete trials, mismatched models, and unknown usage cannot establish a model-quality gain. Public benchmark import/container adapters remain separate work.
+For comparisons, the [benchmark guide](docs/benchmark-guide.md) defaults to **up to one hour per version**: one direct Muse attempt versus up to three BranchPilot attempts per task, with matching model and total allowances. The live pilot adds a request-level **US$40 campaign guard**, including setup and reruns, within the authorized C$150 ceiling. Token cancellation alone is not a dollar cap. Fixture improvements, incomplete trials, mismatched models, and unknown usage cannot establish a model-quality gain. Public benchmark import/container adapters remain separate work.
 
 ## Run without Muse
 
@@ -217,7 +217,7 @@ The strict format permits at most 64 uniquely identified hypotheses and 256 KiB.
 
 ## Measuring and improving results
 
-The controller now avoids copying the entire archive for each event, checkpoints its derived cache, and indexes evidence before comparing candidates. A three-repetition offline comparison measured approximately **60× faster frontier calculation** on 250 tradeoff candidates, **3.2× faster durable stream persistence**, and **34% lower elapsed time** for a 500-item streaming repair fixture. Outcomes, token totals, and default evaluator counts matched the original implementation. These are local controller measurements; live-model latency and quality remain unmeasured. See [performance measurements and tuning](docs/performance.md) for workloads, ranges, and reproduction commands.
+The controller now avoids copying the entire archive for each event, checkpoints its derived cache, and indexes evidence before comparing candidates. A three-repetition offline comparison measured approximately **60× faster frontier calculation** on 250 tradeoff candidates, **3.2× faster durable stream persistence**, and **34% lower elapsed time** for a 500-item streaming repair fixture. Outcomes, token totals, and default evaluator counts matched the original implementation. These are local controller measurements; they do not imply a 60× faster model. Separate [live results](docs/live-muse-results.md) now cover a small Muse comparison. See [performance measurements and tuning](docs/performance.md) for workloads, ranges, and reproduction commands.
 
 ```sh
 npm run perf
@@ -281,7 +281,7 @@ npm start -- smoke-plan my-smoke-spec.json --out /absolute/new-smoke-directory
 npm start -- smoke-report /absolute/new-smoke-directory
 ```
 
-**The live cases have not been executed.** Only when live testing is authorized later, run individual cases with both explicit opt-ins:
+The completion and OS isolation cases have now passed on the tested installation. Cancellation and abrupt-host-failure experiments remain separate gates. Running any live case requires both explicit opt-ins:
 
 ```sh
 npm start -- smoke-run /absolute/new-smoke-directory completion --allow-live --allow-provider-cost
@@ -292,7 +292,7 @@ npm start -- smoke-run /absolute/new-smoke-directory isolation --allow-live --al
 
 The first three cases may incur provider costs; there is no enforceable provider token cap. The harness binds the exact binary/SDK identity, records intent before host creation and events before later actions, and serializes cases through a writer lock. Each case can execute once per plan, including after interruption; it never automatically repeats an uncertain turn. Completion checks a nonce-specific file edit and records settings, streaming, and reported usage. Cancellation waits for terminal evidence beyond an acknowledgement. Host failure closes the host after turn admission and records uncertainty. Isolation probes denied file reads/writes using the same macOS profile; it does not contact Muse.
 
-Every summary retains `compatibilityVerified: false`. Simulation evidence is labeled `protocol_simulation`. The harness cannot create a compatibility lock or enable production capabilities. Complete child/tool billing, surviving descendants/provider work, runtime-home/held-out isolation, durable answers, real reconciliation, concurrent isolation, and other failure timings still require independent live investigation. See [implementation status](docs/implementation.md) for the remaining checks.
+Every smoke summary retains `compatibilityVerified: false`; the smoke harness itself cannot authorize production. The live pilot separately checks the real completion/isolation evidence and native worker configuration, then pins settings and creates isolated session homes. Its gateway bounds supported Wonder text requests, including retries, and blocks on uncertain billing. Durable answers, real reconciliation, concurrent hosts, native child workers, and other failure timings remain unsupported or unverified. See [live results](docs/live-muse-results.md).
 
 Edit inspection runs only after a known terminal and host stop. It uses bounded regular-file reads, rejects symlinks/FIFOs, and preserves usage and protocol evidence when output is missing or malformed. Uncertain workspaces are left uninspected.
 
@@ -301,7 +301,7 @@ Edit inspection runs only after a known terminal and host stop. It uses bounded 
 - Concurrency uses bounded waves, rather than continuously refilling slots. Attempt execution and candidate evaluation occupy separate stages of each wave.
 - Active token cancellation depends on reported usage and cannot guarantee a hard provider cap. Actual overruns remain recorded and reduce future capacity. Cleanup can exceed a timeout.
 - `trusted-fixture` is for known code, not an OS sandbox. Imported candidate code shares the evaluator process; this is not an adversarial test harness.
-- `sandbox-exec` is macOS-specific; the Muse profile needs live verification. There is no Linux/container isolation backend. Sandboxed evaluators cannot use the network; Muse can connect to its provider.
+- `sandbox-exec` is macOS-specific and has passed a live read/write containment probe. There is no Linux/container isolation backend. Sandboxed evaluators cannot use the network; Muse can connect through the billing gateway.
 - The automatic preset handles failure → retry, repeated identical failed repairs or exhausted search → alternatives, and multiple feasible alternatives → bounded tree. Noise-aware resampling remains future work. Opt-in first-feasible stopping saves work on code tasks with no optimization objectives.
 - Model-judgment evaluators, automatic polling/replay of unknown host work, and a web UI are not implemented. Explicit answer/reconcile commands exist; live reconciliation is unverified and gated, while live answering requires persistent-host integration.
 - Both selection modes currently retain feasible, non-dominated candidates in stable archive order. `feasible_first` has no additional weighted ranking.

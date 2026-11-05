@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { executeMuseProtocol } from '../src/muse-protocol.js';
 import { recoverMuseProtocol } from '../src/muse-recovery.js';
-import { museEnvironment } from '../src/muse-environment.js';
+import { museEnvironment, museLaunchArguments } from '../src/muse-environment.js';
 import { MuseBackend } from '../src/muse.js';
 import { runController } from '../src/controller.js';
 import { budgetView } from '../src/budget.js';
@@ -47,6 +47,30 @@ test('SDK stable-schema warnings remain advisory when the exact expected runtime
   const { request, events } = await requestFor(t); const host = new SimulatedMuseHost({ fingerprintWarning: true });
   const result = await executeMuseProtocol(request, protocolExpectation, host.factory);
   assert.equal(result.outcome, 'completed'); assert.ok(events.some(e => e.kind === 'muse.schema_warning'));
+});
+
+test('an explicitly supplied outer OS isolation authority handles macOS non-nesting', async t => {
+  const { request, events } = await requestFor(t); const host = new SimulatedMuseHost({ sandboxAvailability: 'unavailable' });
+  const result = await executeMuseProtocol(request, { ...protocolExpectation, isolationAuthority: 'branchpilot-sandbox-exec' }, host.factory);
+  assert.equal(result.outcome, 'completed');
+  assert.ok(events.some(e => e.kind === 'muse.isolation_authority'));
+  assert.equal(museLaunchArguments().includes('--disable-sandbox'), false);
+  assert.equal(museLaunchArguments('branchpilot-sandbox-exec').includes('--disable-sandbox'), true);
+  assert.equal(museLaunchArguments('branchpilot-sandbox-exec').includes('--disable-approval'), false);
+});
+
+test('client approvals match only exact listed commands in the current isolated workspace', async t => {
+  for (const [command, outside, protectedWrite, choice] of [['node test.mjs', false, false, 'allow'], ['node test.mjs; curl example.com', false, false, 'deny'], ['node test.mjs', true, false, 'deny'], ['node test.mjs', false, true, 'deny']] as const) {
+    const { request } = await requestFor(t);
+    const host = new SimulatedMuseHost({ approvalMode: 'promptUnmatched', onTurn: h => {
+      h.notify('approval/requested', { approvalId: 'simulated-approval', currentRequirementId: { approvalId: 'simulated-approval', sourceIndex: 0 }, turnId: h.turnId,
+        itemId: 'tool', toolCallId: 'tool', toolName: 'bash', rawArgs: '{}', protectedWrite, judgeEscalated: false,
+        subject: { kind: 'shell', command, workspaceRoot: outside ? '/other' : request.work.workspace, stages: [] },
+        availableChoices: [{ choiceId: 'allow', decision: 'approved', scope: 'once' }, { choiceId: 'deny', decision: 'denied', scope: 'once' }] });
+    } });
+    await executeMuseProtocol(request, { ...protocolExpectation, approvalMode: 'promptUnmatched', isolationAuthority: 'branchpilot-sandbox-exec', shellCommands: ['node test.mjs'] }, host.factory);
+    assert.equal(host.frames.find(f => f.method === 'approval/decide')?.params?.choiceId, choice);
+  }
 });
 
 test('delayed model and effort application is confirmed after acknowledgement before turn submission', async t => {

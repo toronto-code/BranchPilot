@@ -9,9 +9,11 @@ export function sandboxCommand(command: string, args: string[], reads: string[],
   const quote = (path: string) => JSON.stringify(realpathSync(path));
   const profile = [
     '(version 1)', '(deny default)', '(allow process-exec process-fork sysctl-read mach-lookup)', '(allow file-read-metadata)',
-    `(allow file-read* ${['/System', '/usr', '/Library', '/opt/homebrew', ...reads, ...writes].filter(existsSync).map(p => `(subpath ${quote(p)})`).join(' ')} (literal "/dev/urandom") (literal "/dev/null"))`,
+    // dyld's cache discovery opens the root directory on current macOS. A
+    // literal grant permits that directory only, never its descendants.
+    `(allow file-read* ${['/System', '/usr', '/bin', '/sbin', '/Library', '/opt/homebrew', '/private/var/db/timezone', ...reads, ...writes].filter(existsSync).map(p => `(subpath ${quote(p)})`).join(' ')} (literal "/") (literal "/dev/urandom") (literal "/dev/null"))`,
     `(allow file-write* ${writes.map(p => `(subpath ${quote(p)})`).join(' ')} (literal "/dev/null"))`,
-    '(allow process-signal (target self))', network ? '(allow network*)' : '',
+    '(allow signal (target self))', network ? '(allow network*)' : '',
   ].join('\n');
   return ['/usr/bin/sandbox-exec', ['-p', profile, command, ...args]];
 }

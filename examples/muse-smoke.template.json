@@ -5,6 +5,7 @@
   "binaryVersion": "REPLACE_WITH_OBSERVED_VERSION",
   "schemaFingerprint": "REPLACE_WITH_EXPECTED_FINGERPRINT",
   "permissionProfile": "REPLACE_WITH_PROFILE",
+  "isolationAuthority": "branchpilot-sandbox-exec",
   "model": { "providerId": "REPLACE_WITH_PROVIDER", "modelId": "REPLACE_WITH_MODEL" },
   "effort": "REPLACE_WITH_ADVERTISED_EFFORT",
   "timeoutSeconds": 30,

@@ -8,7 +8,9 @@ import { modelCatalogSchema, resolveMuseSettings } from './muse-models.js';
 /** Only protocol facts: this is not a compatibility lock or a live-run gate. */
 export interface MuseProtocolExpectation {
   binaryVersion: string; schemaFingerprint: string;
-  permissionProfile: string; approvalMode: 'denyUnmatched';
+  permissionProfile: string; approvalMode: 'denyUnmatched' | 'promptUnmatched';
+  shellCommands?: string[];
+  isolationAuthority?: 'muse' | 'branchpilot-sandbox-exec';
   questionContinuationVerified?: boolean;
 }
 /** The owned host is the only injectable boundary; folds and commands use the real SDK. */
@@ -106,6 +108,12 @@ export async function executeMuseProtocol(request: BackendRequest, expected: Mus
     request.record('muse.session', { sessionId: session.sessionId, durability: client.durability }, { sessionId: session.sessionId });
     session.onApproval(approval => {
       request.record('muse.approval', approval);
+      const subject = approval.subject;
+      const allowed = expected.approvalMode === 'promptUnmatched' && expected.isolationAuthority === 'branchpilot-sandbox-exec' && !approval.protectedWrite && !approval.judgeEscalated
+        && subject?.kind === 'shell' && subject.workspaceRoot === request.work.workspace && typeof subject.command === 'string'
+        && expected.shellCommands?.includes(subject.command);
+      const once = allowed ? approval.availableChoices.find(choice => choice.decision === 'approved' && choice.scope === 'once') : undefined;
+      if (once) { request.record('muse.approval_allowlisted', { approvalId: approval.approvalId, command: subject.kind === 'shell' ? subject.command : undefined }); return { choiceId: once.choiceId }; }
       const denied = approval.availableChoices.find(choice => choice.decision === 'denied') ?? approval.availableChoices.find(choice => choice.decision === 'abort');
       if (!denied) throw Error('Host offered no denial choice');
       return { choiceId: denied.choiceId };

@@ -10,7 +10,7 @@ The user authorized **less than CAD 150 for the entire benchmark campaign**, not
 
 Billing is **Meta API pay-as-you-go**. Use the explicit live-catalog identity for `muse-wonder-1.0`; Wonder Full is subscription-only and must not be silently substituted or purchased. Meta currently lists Wonder at USD 4 per million input tokens, USD 0.20 per million cached-input tokens, and USD 20 per million output tokens, with a separate web-search charge. Verify those rates, the CAD conversion, and any taxes before dispatch. [Official pricing](https://dev.meta.ai/docs/pricing-rate-limits), [Wonder availability](https://dev.meta.ai/models/muse-wonder).
 
-**Paid-run blocker:** Meta documents its dashboard spend limit as an email alert, not a hard usage cap. BranchPilot's token reservations and cancellation can overshoot and do not cover all separately billed work. Do not treat either as a guarantee that this campaign will remain under CAD 150. Request-level worst-case cost reservations and complete billing coverage must be verified before paid dispatch under this strict ceiling; if cost or stopped-work status is unknown, start no further paid work. [Meta's spend-limit explanation](https://dev.meta.ai/help/billing/spend-limit-alert).
+**Implemented live-pilot guard:** `src/muse-gateway.ts` reserves US$7 before each supported Wonder request, verifies current catalog prices/limits, and enforces an immutable US$40 campaign ledger. The host receives only a local proxy token. Unknown billing blocks all later paid requests, including after restart; active requests are settled before another is admitted. Hosted tools, other models, remote continuations, and premium tiers are refused. This covers the narrow pilot transport, not arbitrary Muse use. Meta documents its dashboard spend limit as an email alert, not a hard usage cap. BranchPilot's token reservations and cancellation can overshoot and do not cover all separately billed work. Do not treat either as a guarantee that this campaign will remain under CAD 150. Use the verified gateway for this campaign; if cost or stopped-work status is unknown, start no further paid work. [Meta's spend-limit explanation](https://dev.meta.ai/help/billing/spend-limit-alert).
 
 ## Which benchmarks
 
@@ -30,7 +30,7 @@ Terminal-Bench 2.0 uses Harbor. Harbor exposes separate agent and verifier timeo
 
 HumanEval+/MBPP+ can be a quick correctness smoke check, but they exercise function synthesis more than BranchPilot's repository search and recovery. Use them as supplementary checks, not the main evidence for harder agentic tasks. [EvalPlus project](https://evalplus.github.io/).
 
-**Integration status:** the paired runner below works with BranchPilot task/evaluator configurations. It does not yet import Aider datasets, export SWE-bench patch predictions, or supply a Harbor/container adapter. Those mappings and reference-verifier checks are still required for these public benchmark recommendations. The included runnable comparison is explicitly a local fixture. No public benchmark result is claimed.
+**Integration status:** the paired runner below works with BranchPilot task/evaluator configurations. It does not yet import Aider datasets, export SWE-bench patch predictions, or supply a Harbor/container adapter. Those mappings and reference-verifier checks are still required for these public benchmark recommendations. The fixture example and the original live coding pilot are runnable. No public benchmark result is claimed. See [live results and reproduction](live-muse-results.md).
 
 ## Fair default-versus-new comparison
 
@@ -68,7 +68,7 @@ For a prepared 12-task dataset, provide this specification with **all twelve act
   "datasetRevision": "EXACT_DATASET_COMMIT",
   "armSeconds": 3600,
   "taskSeconds": 240,
-  "taskTokens": 24000,
+  "taskTokens": 360000,
   "searchAttempts": 3,
   "cases": [
     { "id": "actual-task-id", "config": "tasks/actual-task-id/config.json" }
@@ -77,6 +77,8 @@ For a prepared 12-task dataset, provide this specification with **all twelve act
 ```
 
 The displayed single entry illustrates the format; it does not create twelve tasks. Paths are relative to the specification. `taskSeconds` includes baseline evaluation, model work, development evaluation, final grading, and an allowance for setup. The planner subtracts declared evaluator limits and reserves final grading before allocating attempt time. If those limits leave too little model time, preparation fails. `taskTokens` covers all attempts for one version of one task; it is not a dollar limit or a provider-enforced hard cap.
+
+Live testing observed about 19,000 input tokens per model step even on a tiny edit. The old 24,000-token fixture allowance is too small for realistic Muse tool use. The live pilot uses 360,000 total tokens per task, shared across up to three search attempts; this is a ceiling, not a target. Budget-stopped edits are graded only after known usage and terminal/host-stop confirmation.
 
 Preparation fingerprints the inputs/evaluator bundles, records the exact controller build and configuration, and starts neither Muse nor an evaluator. Both versions refuse source/environment drift and stale implementation fingerprints. A version job has its own wall deadline and will not start a task unless that task's full declared allowance still fits. Cancellation/cleanup can overshoot, which the report flags rather than hiding.
 
@@ -87,7 +89,7 @@ node dist/src/cli.js compare-run COMPARISON_DIRECTORY default --allow-live --all
 node dist/src/cli.js compare-run COMPARISON_DIRECTORY new --allow-live --allow-provider-cost
 ```
 
-These are future instructions, not commands executed during this implementation pass. A comparison plan never creates or certifies a Muse compatibility lock.
+The live pilot wraps these operations with the spending gateway and verified runtime settings. The generic comparison planner never creates or certifies a Muse compatibility lock. Do not run the generic live commands directly under this campaign's spending limit without that gateway.
 
 ## What counts as improvement
 

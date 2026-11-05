@@ -1,6 +1,6 @@
 import { spawnMspConnection } from '@muse-code/sdk';
 import { z } from 'zod';
-import { existsSync, readFileSync, mkdirSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join } from 'node:path';
 import { createRequire } from 'node:module';
 import type { Backend, BackendAnswer, BackendOperation, BackendRequest, BackendResult } from './backend.js';
@@ -9,7 +9,7 @@ import { hash } from './store.js';
 import { sandboxCommand } from './process.js';
 import { executeMuseProtocol } from './muse-protocol.js';
 import { recoverMuseProtocol } from './muse-recovery.js';
-import { museEnvironment } from './muse-environment.js';
+import { museEnvironment, museLaunchArguments } from './muse-environment.js';
 
 export const SDK_VERSION = '1.4.14';
 export function installedMuseSDK(): { version: string; entry: string; digest: string } {
@@ -33,14 +33,20 @@ export const compatibilitySchema = z.object({
   sdkVersion: z.literal(SDK_VERSION), binaryVersion: z.string().min(1), binaryDigest: z.string().regex(/^[a-f0-9]{64}$/),
   schemaFingerprint: z.string().min(1), verifiedAt: z.string().datetime(),
   runtimeHome: z.string().refine(isAbsolute, 'runtimeHome must be absolute'),
-  permissionProfile: z.string().min(1), approvalMode: z.literal('denyUnmatched'),
+  permissionProfile: z.string().min(1), approvalMode: z.enum(['denyUnmatched', 'promptUnmatched']),
+  shellCommands: z.array(z.string().min(1)).default([]),
   isolationVerified: z.literal(true), untrackedWorkersDisabled: z.literal(true), usageIncludesAllWork: z.literal(true),
+  isolationAuthority: z.enum(['muse', 'branchpilot-sandbox-exec']).default('muse'),
+  isolateSessionHomes: z.boolean().default(false), runtimeSettingsDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   questionContinuationVerified: z.boolean().default(false), hostReconciliationVerified: z.boolean().default(false), concurrentIsolationVerified: z.boolean().default(false),
 }).strict();
 export function verifyMuseLock(binary: string, file: string) {
   const lock = compatibilitySchema.parse(JSON.parse(readFileSync(file, 'utf8')));
   const sdkIdentity = installedMuseSDK();
   if (hash(readFileSync(binary)) !== lock.binaryDigest) throw Error('Muse binary differs from the tested compatibility lock');
+  if (lock.approvalMode === 'promptUnmatched' && (lock.isolationAuthority !== 'branchpilot-sandbox-exec' || !lock.shellCommands.length)) throw Error('Client shell approvals require external OS isolation and an explicit command allowlist');
+  if (lock.isolateSessionHomes && !lock.runtimeSettingsDigest) throw Error('Isolated session homes require pinned runtime settings');
+  if (lock.runtimeSettingsDigest && hash(readFileSync(join(lock.runtimeHome, '.config/muse/settings.json'))) !== lock.runtimeSettingsDigest) throw Error('Muse runtime settings differ from the tested compatibility lock');
   return { ...lock, sdkIdentity };
 }
 
@@ -68,11 +74,22 @@ export class MuseBackend implements Backend {
     if (request.backendIdentity && hash(JSON.stringify({ kind: 'muse', ...lock })) !== hash(JSON.stringify(request.backendIdentity))) throw Error('Muse compatibility settings differ from the frozen run manifest');
     if (request.config.budget.maxConcurrency > 1 && !lock.concurrentIsolationVerified) throw Error('Concurrent Muse execution remains gated until isolation between concurrent hosts is verified');
     request.signal.throwIfAborted();
+    let runtimeHome = lock.runtimeHome;
+    if (lock.isolateSessionHomes) {
+      if (config.apiKeyEnv !== 'META_API_KEY') throw Error('Isolated session homes require explicit environment authentication');
+      runtimeHome = join(dirname(request.work.workspace), '.muse-runtime', request.work.id);
+      const settingFile = join(runtimeHome, '.config/muse/settings.json');
+      if (recovery === undefined) {
+        mkdirSync(runtimeHome, { recursive: true, mode: 0o700 }); mkdirSync(dirname(settingFile), { recursive: true });
+        writeFileSync(settingFile, readFileSync(join(lock.runtimeHome, '.config/muse/settings.json')), { flag: 'wx', mode: 0o600 });
+      }
+      if (hash(readFileSync(settingFile)) !== lock.runtimeSettingsDigest) throw Error('Attempt runtime settings changed');
+    }
     const scratch = join(request.work.workspace, '.branchpilot-tmp'); mkdirSync(scratch, { recursive: true });
-    const [command, args] = sandboxCommand(config.binary, ['serve'], [request.work.workspace, lock.runtimeHome, config.binary], [request.work.workspace, lock.runtimeHome], true);
+    const [command, args] = sandboxCommand(config.binary, museLaunchArguments(lock.isolationAuthority), [request.work.workspace, runtimeHome, config.binary], [request.work.workspace, runtimeHome], true);
     const openHost: import('./muse-protocol.js').MuseHostFactory = hooks => spawnMspConnection({
       command, args, cwd: request.work.workspace,
-      env: museEnvironment(lock.runtimeHome, scratch, config.apiKeyEnv),
+      env: museEnvironment(runtimeHome, scratch, config.apiKeyEnv),
       shutdownTimeoutMs: Math.round(request.config.budget.cancellationGraceSeconds * 1000),
       connection: { mintCommandId: hooks.mintCommandId }, onStderr: hooks.onStderr,
     });

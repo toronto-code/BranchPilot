@@ -10,12 +10,13 @@ import { configSchema } from './config.js';
 import { atomicWrite, hash, id, RunStore } from './store.js';
 import { runProcess, sandboxCommand } from './process.js';
 import { contained, readRegularText, rejectNestedStorage } from './workspaces.js';
-import { museEnvironment } from './muse-environment.js';
+import { museEnvironment, museLaunchArguments } from './muse-environment.js';
 
 export const smokeSpecSchema = z.object({
   schemaVersion: z.literal(1), binary: z.string().min(1), runtimeHome: z.string().refine(isAbsolute),
   binaryVersion: z.string().min(1), schemaFingerprint: z.string().min(1), permissionProfile: z.string().min(1),
   apiKeyEnv: z.literal('META_API_KEY').optional(),
+  isolationAuthority: z.enum(['muse', 'branchpilot-sandbox-exec']).default('muse'),
   model: z.object({ providerId: z.string().min(1), modelId: z.string().min(1) }).strict(), effort: z.string().min(1),
   timeoutSeconds: z.number().finite().positive().max(120).default(30), cancellationGraceSeconds: z.number().finite().positive().max(10).default(2),
 }).strict();
@@ -100,7 +101,7 @@ async function executeSmokeCase(directory: string, name: SmokeCase, options: { s
       record('smoke.isolation_probe', result);
       atomicWrite(join(caseDirectory, 'result.json'), JSON.stringify({ mode, result, observation: result.stopped && result.code === 0 ? JSON.parse(result.stdout) : null }));
     } else {
-      const [command, args] = options.openHost ? ['', [] as string[]] : sandboxCommand(spec.binary, ['serve'], [workspace, spec.runtimeHome, spec.binary], [workspace, spec.runtimeHome], true);
+      const [command, args] = options.openHost ? ['', [] as string[]] : sandboxCommand(spec.binary, museLaunchArguments(spec.isolationAuthority), [workspace, spec.runtimeHome, spec.binary], [workspace, spec.runtimeHome], true);
       const open: MuseHostFactory = hooks => {
         host = options.openHost ? options.openHost(hooks) : spawnMspConnection({ command, args, cwd: workspace, env: museEnvironment(spec.runtimeHome, scratch, spec.apiKeyEnv), shutdownTimeoutMs: Math.round(spec.cancellationGraceSeconds * 1000), connection: { mintCommandId: hooks.mintCommandId }, onStderr: hooks.onStderr });
         return host;

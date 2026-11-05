@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "agent": {
+    "model": {
+      "kind": "host-default"
+    },
+    "effort": {
+      "kind": "host-default"
+    }
+  },
+  "policy": {
+    "mode": "fixed",
+    "ruleset": "hackathon-v1",
+    "allowedStrategies": [
+      "direct",
+      "retry",
+      "best-of-n",
+      "tree"
+    ]
+  },
+  "budget": {
+    "total": {
+      "tokens": 10000,
+      "workSeconds": 300,
+      "attempts": 10,
+      "experiments": 30
+    },
+    "wallSeconds": 600,
+    "maxConcurrency": 1,
+    "perAttempt": {
+      "tokenReservation": 1000,
+      "timeoutSeconds": 5
+    },
+    "finalizationReserve": {
+      "tokens": 0,
+      "workSeconds": 0,
+      "attempts": 0,
+      "experiments": 0
+    },
+    "cancellationGraceSeconds": 0.2,
+    "missingUsage": "hold-reservation-and-pause"
+  },
+  "execution": {
+    "isolationProfile": "trusted-fixture",
+    "approvals": "deny-unless-allowlisted",
+    "userInput": "pause",
+    "nativeFork": "disabled"
+  },
+  "task": {
+    "key": "cache-ideas",
+    "type": "idea",
+    "goal": "Compare exact-query and semantic caching assumptions using falsifiable experiment plans.",
+    "inputs": [
+      {
+        "path": "./fixtures/idea"
+      }
+    ],
+    "constraints": [],
+    "objectives": [],
+    "evaluators": [
+      {
+        "id": "proposal-structure",
+        "kind": "executable",
+        "split": "development",
+        "role": "rubric",
+        "definition": {
+          "path": "./evaluators/idea.json"
+        },
+        "dependsOn": [],
+        "repetitions": 1,
+        "warmups": 0,
+        "timeoutSeconds": 5
+      }
+    ],
+    "baseline": {
+      "mode": "status_quo_proposal",
+      "description": "No cache: every query runs independently."
+    },
+    "selection": {
+      "mode": "pareto",
+      "maxFinalists": 2,
+      "acceptance": "human_review"
+    }
+  },
+  "backend": {
+    "kind": "fixture",
+    "plans": [
+      {
+        "proposal": "# Exact-query cache\n\nAssumption: exact repeated queries are common.\nPrediction: at least 20% of synthetic requests repeat.\nExperiment: replay a synthetic trace and measure hit rate under a fixed memory bound.\n",
+        "hypotheses": [
+          {
+            "id": "repeat-rate",
+            "assumption": "Exact queries repeat",
+            "expectedBenefit": "Avoid repeated work",
+            "uncertainty": "Hit rate under query changes",
+            "prediction": "At least 20% hits",
+            "falsificationTest": "Replay fixed trace; reject if hits below 20%"
+          }
+        ],
+        "tokens": 120
+      },
+      {
+        "proposal": "# Semantic cache\n\nAssumption: similar wording implies interchangeable results.\nPrediction: reuse achieves at least 95% agreement with fresh computation.\nExperiment: compare reused and fresh results on deliberately ambiguous synthetic queries.\n",
+        "hypotheses": [
+          {
+            "id": "semantic-equivalence",
+            "assumption": "Similar queries have equivalent results",
+            "expectedBenefit": "Broader reuse",
+            "uncertainty": "False equivalence",
+            "prediction": "95% result agreement",
+            "falsificationTest": "Reject on more than 5% mismatched results"
+          }
+        ],
+        "tokens": 180
+      }
+    ]
+  },
+  "strategy": {
+    "name": "best-of-n",
+    "n": 2
+  }
+}

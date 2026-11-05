@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "agent": {
+    "model": {
+      "kind": "preference",
+      "choices": [
+        {
+          "displayLabel": "Muse Wonder Full"
+        },
+        {
+          "modelId": "muse-wonder-1.0"
+        }
+      ]
+    },
+    "effort": {
+      "kind": "highest",
+      "minimum": "high"
+    }
+  },
+  "policy": {
+    "mode": "auto",
+    "ruleset": "hackathon-v1",
+    "allowedStrategies": [
+      "direct",
+      "retry",
+      "best-of-n",
+      "tree"
+    ]
+  },
+  "budget": {
+    "total": {
+      "tokens": 256000,
+      "workSeconds": 8000,
+      "attempts": 4,
+      "experiments": 20
+    },
+    "wallSeconds": 10800,
+    "maxConcurrency": 1,
+    "perAttempt": {
+      "tokenReservation": 64000,
+      "timeoutSeconds": 1800
+    },
+    "finalizationReserve": {
+      "tokens": 0,
+      "workSeconds": 0,
+      "attempts": 0,
+      "experiments": 0
+    },
+    "cancellationGraceSeconds": 5,
+    "missingUsage": "hold-reservation-and-pause"
+  },
+  "execution": {
+    "isolationProfile": "sandbox-exec",
+    "approvals": "deny-unless-allowlisted",
+    "userInput": "pause",
+    "nativeFork": "disabled"
+  },
+  "task": {
+    "key": "muse-frontier-repair",
+    "type": "code",
+    "goal": "Fix addition without changing its exported API.",
+    "inputs": [
+      {
+        "path": "./fixtures/repair"
+      }
+    ],
+    "constraints": [
+      {
+        "id": "addition",
+        "kind": "check",
+        "evaluatorId": "addition-tests",
+        "check": "addition"
+      }
+    ],
+    "objectives": [],
+    "evaluators": [
+      {
+        "id": "addition-tests",
+        "kind": "executable",
+        "split": "development",
+        "role": "correctness",
+        "definition": {
+          "path": "./evaluators/repair.json"
+        },
+        "dependsOn": [],
+        "repetitions": 1,
+        "warmups": 0,
+        "timeoutSeconds": 5
+      }
+    ],
+    "baseline": {
+      "mode": "initial_artifacts",
+      "description": "Original calculator with failing addition."
+    },
+    "selection": {
+      "mode": "feasible_first",
+      "maxFinalists": 1,
+      "acceptance": "all_constraints",
+      "earlyStop": "first_feasible"
+    }
+  },
+  "backend": {
+    "kind": "muse",
+    "binary": "/REPLACE/WITH/EXACT/MUSE/BINARY",
+    "compatibilityLock": "./muse-lock.template.json"
+  },
+  "strategy": {
+    "name": "direct"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "validity": "pass",
+  "checks": [],
+  "metrics": [{ "name": "clarity", "unit": "rating_1_to_5", "value": 4 }],
+  "feedback": "Replace this sample with your actual assessment before submitting it.",
+  "findings": []
+}

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "dataset": "branchpilot-offline-repair",
+  "datasetRevision": "fixture-v1",
+  "armSeconds": 3600,
+  "taskSeconds": 240,
+  "taskTokens": 24000,
+  "searchAttempts": 3,
+  "cases": [
+    { "id": "retry-repair", "config": "retry.json" }
+  ]
+}

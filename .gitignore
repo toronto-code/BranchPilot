@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.branchpilot/
+*.log
+.DS_Store

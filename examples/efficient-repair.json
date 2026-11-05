@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "agent": {
+    "model": {
+      "kind": "host-default"
+    },
+    "effort": {
+      "kind": "host-default"
+    }
+  },
+  "policy": {
+    "mode": "fixed",
+    "ruleset": "hackathon-v1",
+    "allowedStrategies": [
+      "direct",
+      "retry",
+      "best-of-n",
+      "tree"
+    ]
+  },
+  "budget": {
+    "total": {
+      "tokens": 10000,
+      "workSeconds": 300,
+      "attempts": 10,
+      "experiments": 30
+    },
+    "wallSeconds": 600,
+    "maxConcurrency": 1,
+    "perAttempt": {
+      "tokenReservation": 1000,
+      "timeoutSeconds": 5
+    },
+    "finalizationReserve": {
+      "tokens": 0,
+      "workSeconds": 0,
+      "attempts": 0,
+      "experiments": 0
+    },
+    "cancellationGraceSeconds": 0.2,
+    "missingUsage": "hold-reservation-and-pause"
+  },
+  "execution": {
+    "isolationProfile": "trusted-fixture",
+    "approvals": "deny-unless-allowlisted",
+    "userInput": "pause",
+    "nativeFork": "disabled"
+  },
+  "task": {
+    "key": "repair-search-efficiency",
+    "type": "code",
+    "goal": "Fix addition without changing its exported API.",
+    "inputs": [
+      {
+        "path": "./fixtures/repair"
+      }
+    ],
+    "constraints": [
+      {
+        "id": "addition",
+        "kind": "check",
+        "evaluatorId": "addition-tests",
+        "check": "addition"
+      }
+    ],
+    "objectives": [],
+    "evaluators": [
+      {
+        "id": "addition-tests",
+        "kind": "executable",
+        "split": "development",
+        "role": "correctness",
+        "definition": {
+          "path": "./evaluators/repair.json"
+        },
+        "dependsOn": [],
+        "repetitions": 1,
+        "warmups": 0,
+        "timeoutSeconds": 5
+      }
+    ],
+    "baseline": {
+      "mode": "initial_artifacts",
+      "description": "Original calculator with failing addition."
+    },
+    "selection": {
+      "mode": "feasible_first",
+      "maxFinalists": 1,
+      "acceptance": "all_constraints"
+    }
+  },
+  "backend": {
+    "kind": "fixture",
+    "plans": [
+      {
+        "files": {
+          "calculator.mjs": "export function add(a, b) { return a + b; }\n"
+        },
+        "tokens": 120
+      },
+      {
+        "files": {
+          "calculator.mjs": "export function add(a, b) { return a + b; }\n"
+        },
+        "tokens": 120
+      },
+      {
+        "files": {
+          "calculator.mjs": "export function add(a, b) { return a + b; }\n"
+        },
+        "tokens": 120
+      },
+      {
+        "files": {
+          "calculator.mjs": "export function add(a, b) { return a + b; }\n"
+        },
+        "tokens": 120
+      }
+    ]
+  },
+  "strategy": {
+    "name": "best-of-n",
+    "n": 4
+  }
+}

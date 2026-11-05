@@ -1,0 +1,13 @@
+{
+  "sdkVersion": "1.4.14",
+  "binaryVersion": "UNVERIFIED",
+  "binaryDigest": "REPLACE_WITH_VERIFIED_SHA256",
+  "schemaFingerprint": "UNVERIFIED",
+  "verifiedAt": null,
+  "runtimeHome": "/absolute/path/to/dedicated-runtime-home",
+  "permissionProfile": "UNVERIFIED",
+  "approvalMode": "denyUnmatched",
+  "isolationVerified": false,
+  "untrackedWorkersDisabled": false,
+  "usageIncludesAllWork": false
+}

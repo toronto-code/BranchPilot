@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 1,
+  "agent": {
+    "model": {
+      "kind": "host-default"
+    },
+    "effort": {
+      "kind": "host-default"
+    }
+  },
+  "policy": {
+    "mode": "fixed",
+    "ruleset": "hackathon-v1",
+    "allowedStrategies": [
+      "direct",
+      "retry",
+      "best-of-n",
+      "tree"
+    ]
+  },
+  "budget": {
+    "total": {
+      "tokens": 10000,
+      "workSeconds": 300,
+      "attempts": 10,
+      "experiments": 30
+    },
+    "wallSeconds": 600,
+    "maxConcurrency": 1,
+    "perAttempt": {
+      "tokenReservation": 1000,
+      "timeoutSeconds": 5
+    },
+    "finalizationReserve": {
+      "tokens": 0,
+      "workSeconds": 15,
+      "attempts": 0,
+      "experiments": 3
+    },
+    "cancellationGraceSeconds": 0.2,
+    "missingUsage": "hold-reservation-and-pause"
+  },
+  "execution": {
+    "isolationProfile": "trusted-fixture",
+    "approvals": "deny-unless-allowlisted",
+    "userInput": "pause",
+    "nativeFork": "disabled"
+  },
+  "task": {
+    "key": "bounded-deduplication-tree",
+    "type": "optimization",
+    "goal": "Reduce indexed input reads while preserving first-occurrence deduplication for integer arrays.",
+    "inputs": [
+      {
+        "path": "./fixtures/optimization"
+      }
+    ],
+    "constraints": [
+      {
+        "id": "output-equivalence",
+        "kind": "check",
+        "evaluatorId": "correctness",
+        "check": "stable-unique"
+      }
+    ],
+    "objectives": [
+      {
+        "metric": "input_reads",
+        "direction": "minimize",
+        "unit": "reads",
+        "minMeaningfulChange": 1,
+        "evidenceKind": "executable"
+      }
+    ],
+    "evaluators": [
+      {
+        "id": "correctness",
+        "kind": "executable",
+        "split": "development",
+        "role": "correctness",
+        "definition": {
+          "path": "./evaluators/unique-correctness.json"
+        },
+        "dependsOn": [],
+        "repetitions": 1,
+        "warmups": 0,
+        "timeoutSeconds": 5
+      },
+      {
+        "id": "reads",
+        "kind": "executable",
+        "split": "development",
+        "role": "objective",
+        "definition": {
+          "path": "./evaluators/unique-benchmark.json"
+        },
+        "dependsOn": [
+          "correctness"
+        ],
+        "repetitions": 3,
+        "warmups": 1,
+        "timeoutSeconds": 5
+      },
+      {
+        "id": "final-correctness",
+        "kind": "executable",
+        "split": "held_out",
+        "role": "correctness",
+        "definition": {
+          "path": "./evaluators/unique-heldout.json"
+        },
+        "dependsOn": [],
+        "repetitions": 1,
+        "warmups": 0,
+        "timeoutSeconds": 5
+      }
+    ],
+    "baseline": {
+      "mode": "initial_artifacts",
+      "description": "Correct quadratic indexOf implementation."
+    },
+    "selection": {
+      "mode": "pareto",
+      "maxFinalists": 2,
+      "acceptance": "all_constraints"
+    }
+  },
+  "backend": {
+    "kind": "fixture",
+    "plans": [
+      {
+        "files": {
+          "unique.mjs": "export function unique(values) { return [...new Set(values)]; }\n"
+        },
+        "tokens": 150
+      },
+      {
+        "files": {
+          "unique.mjs": "export function unique(values) { const seen = new Set(); const result = []; for (const value of values) { if (!seen.has(value)) { seen.add(value); result.push(value); } } return result; }\n"
+        },
+        "tokens": 180
+      },
+      {
+        "files": {},
+        "tokens": 80
+      },
+      {
+        "files": {},
+        "tokens": 70
+      }
+    ]
+  },
+  "strategy": {
+    "name": "tree",
+    "width": 2,
+    "maxDepth": 2,
+    "maxChildren": 2
+  }
+}

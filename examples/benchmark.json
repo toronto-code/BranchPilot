@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "repetitions": 3,
+  "cases": [
+    { "id": "repair-full-search", "config": "efficient-repair.json", "earlyStop": "never" },
+    { "id": "repair-stop-on-success", "config": "efficient-repair.json", "earlyStop": "first_feasible" },
+    { "id": "optimization", "config": "optimization.json" }
+  ]
+}

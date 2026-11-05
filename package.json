@@ -1,0 +1,40 @@
+{
+  "name": "branchpilot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A local, budgeted search controller for coding and experiments",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "branchpilot": "dist/src/cli.js"
+  },
+  "files": [
+    "dist/src",
+    "src",
+    "examples",
+    "bench",
+    "README.md",
+    "docs"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "start": "node dist/src/cli.js",
+    "demo": "npm run build && node dist/src/cli.js run examples/repair.json",
+    "bench": "npm run build && node dist/src/cli.js benchmark examples/benchmark.json",
+    "perf": "npm run build && node bench/performance.mjs",
+    "prepack": "npm run build",
+    "release:check": "npm run check && npm test && npm pack --dry-run --ignore-scripts --cache .branchpilot/npm-cache"
+  },
+  "dependencies": {
+    "@muse-code/sdk": "1.4.14",
+    "zod": "3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3"
+  }
+}

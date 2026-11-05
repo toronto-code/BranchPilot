@@ -1,0 +1,8 @@
+{
+  "name": "offline-build-example",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": { "local-numbers": "file:vendor/local-numbers" },
+  "scripts": { "postinstall": "node -e \"require('node:fs').writeFileSync('UNEXPECTED_INSTALL_SCRIPT', 'ran')\"" }
+}

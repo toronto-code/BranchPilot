@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { BackendRequest } from './backend.js';
 import type { MuseProtocolExpectation } from './muse-protocol.js';
+import { checkCancellation } from './time.js';
 
 export const museCapabilities = (dialogs = false) => ({ experimentalApi: true, userInputDialogs: dialogs });
 
@@ -35,7 +36,7 @@ export function verifySessionAuthority(raw: unknown, sessionId: string, workspac
 export async function waitForMuseSetting(check: () => Promise<boolean>, signal: AbortSignal, timeoutSeconds: number, label: string): Promise<void> {
   const deadline = Date.now() + Math.min(timeoutSeconds * 1000, 5000);
   do {
-    signal.throwIfAborted();
+    checkCancellation(signal);
     if (await check()) return;
     if (Date.now() >= deadline) break;
     await delay(Math.min(50, Math.max(1, deadline - Date.now())), undefined, { signal });

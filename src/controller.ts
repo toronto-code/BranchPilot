@@ -13,6 +13,7 @@ import { capture, materialize, rejectEvaluatorInsideInput, rejectNestedStorage }
 import { writeReport } from './report.js';
 import { executionEnvironment } from './environment.js';
 import { checkEvaluationHistory } from './evaluation-history.js';
+import { checkCancellation, combineSignals, wallDeadline } from './time.js';
 
 export function createRun(configInput: Config, parent: string): RunStore {
   const config = configSchema.parse(configInput); const runId = id(); const dir = join(parent, runId);
@@ -61,7 +62,8 @@ export function switchStrategy(store: RunStore, strategy: Strategy, mode: 'fixed
 }
 
 export async function runController(store: RunStore, options: { signal?: AbortSignal; pauseAfter?: number; backend?: Backend; onProgress?: (message: string) => void } = {}): Promise<State> {
-  const signal = options.signal ?? new AbortController().signal;
+  const deadline = wallDeadline(Date.parse(store.state.deadline), Error('Run wall budget reached'));
+  const signal = options.signal ? combineSignals([options.signal, deadline.signal]) : deadline.signal;
   const scheduler = new Scheduler(store, signal, options.backend);
   const say = options.onProgress ?? (() => undefined);
   let attemptsThisInvocation = 0;
@@ -71,10 +73,12 @@ export async function runController(store: RunStore, options: { signal?: AbortSi
     const visit = (e: typeof ordered[number]) => { if (ordered.includes(e)) return; for (const dependency of e.spec.dependsOn) visit(store.state.manifest.evaluators.find(x => x.spec.id === dependency)!); ordered.push(e); };
     for (const evaluator of store.state.manifest.evaluators.filter(e => e.spec.split === split)) visit(evaluator);
     for (const evaluator of ordered) {
+      deadline.check();
       say(`Evaluate ${revision.id.slice(0, 8)}: ${evaluator.spec.id}`);
       const result = await scheduler.evaluate(revision, evaluator, phase);
+      deadline.check();
       if (store.state.status === 'needs_attention') throw new InteractionRequired(store.state.message);
-      signal.throwIfAborted();
+      checkCancellation(signal);
       if (result?.failureType === 'infrastructure') {
         store.append({ type: 'run.status', status: 'needs_attention', message: `Evaluator ${evaluator.spec.id} failed: ${result.feedback}` });
         throw new InteractionRequired(result.feedback);
@@ -106,6 +110,8 @@ export async function runController(store: RunStore, options: { signal?: AbortSi
       // Reconcile a crash between successful development and its evaluation.
       for (const revision of store.state.revisions.filter(r => r.attemptId)) await evaluate(revision, 'search');
       while (!signal.aborted) {
+        deadline.check();
+        checkCancellation(signal);
         if (options.pauseAfter !== undefined && attemptsThisInvocation >= options.pauseAfter) {
           store.append({ type: 'run.status', status: 'paused', message: 'Paused at the requested settled checkpoint' }); return store.state;
         }
@@ -173,6 +179,7 @@ export async function runController(store: RunStore, options: { signal?: AbortSi
       store.append({ type: 'run.status', status: unresolved ? 'needs_attention' : 'failed', outcome: 'infrastructure_failure', message: String(error) });
     }
   } finally {
+    deadline.dispose();
     if (['completed', 'cancelled', 'failed'].includes(store.state.status)) {
       for (const work of Object.values(store.state.works)) if (work.state === 'settled' && Object.keys(work.evaluationReservations ?? {}).length) store.append({ type: 'work.updated', work: { ...work, evaluationReservations: {} } });
     }

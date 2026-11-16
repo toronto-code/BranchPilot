@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { fileURLToPath } from 'node:url';
 import type { Backend } from './backend.js';
+import { combineSignals } from './time.js';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { loadConfig, strategySchema } from './config.js';
@@ -120,15 +121,15 @@ export async function runCli(argv: string[], options: { backend?: Backend; signa
   let opened: RunStore | undefined;
   try {
     if (command === 'compare-plan') { prepareComparison(resolve(target), resolve(option(args, '--out')!)); console.log('Comparison plan frozen. No model or evaluator was launched.'); return; }
-    if (command === 'compare-run') { await runComparisonArm(resolve(target), args[0] as ComparisonArm, { signal: options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal, allowLive: args.includes('--allow-live'), allowProviderCost: args.includes('--allow-provider-cost') }); console.log(`Comparison records: ${join(resolve(target), 'summary.md')}`); return; }
+    if (command === 'compare-run') { await runComparisonArm(resolve(target), args[0] as ComparisonArm, { signal: options.signal ? combineSignals([options.signal, controller.signal]) : controller.signal, allowLive: args.includes('--allow-live'), allowProviderCost: args.includes('--allow-provider-cost') }); console.log(`Comparison records: ${join(resolve(target), 'summary.md')}`); return; }
     if (command === 'compare-report') { writeComparisonReport(resolve(target)); console.log(readFileSync(join(resolve(target), 'summary.md'), 'utf8')); return; }
     if (command === 'smoke-plan') { prepareSmoke(resolve(target), resolve(option(args, '--out')!)); console.log('Unverified smoke plan prepared. No Muse was launched.'); return; }
     if (command === 'smoke-report') { writeSmokeReport(resolve(target)); console.log(readFileSync(join(resolve(target), 'summary.md'), 'utf8')); return; }
-    if (command === 'smoke-run') { await runSmokeCase(resolve(target), args[0] as SmokeCase, { allowLive: args.includes('--allow-live'), allowProviderCost: args.includes('--allow-provider-cost'), signal: options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal }); console.log('Smoke observations recorded; compatibility remains unverified.'); return; }
+    if (command === 'smoke-run') { await runSmokeCase(resolve(target), args[0] as SmokeCase, { allowLive: args.includes('--allow-live'), allowProviderCost: args.includes('--allow-provider-cost'), signal: options.signal ? combineSignals([options.signal, controller.signal]) : controller.signal }); console.log('Smoke observations recorded; compatibility remains unverified.'); return; }
     if (command === 'benchmark') {
       const parent = resolve('.branchpilot/benchmarks');
       const directory = resolve(option(args, '--out') ?? join(parent, id()));
-      const trials = await runBenchmark(resolve(target), directory, options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal);
+      const trials = await runBenchmark(resolve(target), directory, options.signal ? combineSignals([options.signal, controller.signal]) : controller.signal);
       console.log(`Offline measurements: ${join(directory, 'summary.md')}`);
       if (trials.some(trial => trial.status !== 'completed')) process.exitCode = 2;
       return;
@@ -141,7 +142,7 @@ export async function runCli(argv: string[], options: { backend?: Backend; signa
       const pauseAfter = positiveOption(args, '--pause-after');
       if (pauseAfter !== undefined && !Number.isInteger(pauseAfter)) throw Error('--pause-after must be an integer');
       console.log(`Run directory: ${store.dir}`);
-      const state = await runController(store, { signal: options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal, backend: options.backend, pauseAfter, onProgress: message => console.log(message) });
+      const state = await runController(store, { signal: options.signal ? combineSignals([options.signal, controller.signal]) : controller.signal, backend: options.backend, pauseAfter, onProgress: message => console.log(message) });
       console.log(`${state.status}: ${state.outcome ?? state.message ?? ''}\nReport: ${join(store.dir, 'report.md')}`);
       if (state.status === 'failed' || state.status === 'needs_attention') process.exitCode = 2;
     } else if (command === 'inspect') {
@@ -156,7 +157,7 @@ export async function runCli(argv: string[], options: { backend?: Backend; signa
       new Scheduler(store, controller.signal).assess(outputSchema.parse(JSON.parse(readFileSync(args[0], 'utf8'))), rater); writeReport(store); console.log('Assessment recorded. Use resume to continue.');
     } else if (command === 'answer' || command === 'reconcile') {
       if (!args[0] || (command === 'answer' && !args[1])) throw Error('Provide a work ID and, for answer, an answer.json file');
-      const scheduler = new Scheduler(store, options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal, options.backend);
+      const scheduler = new Scheduler(store, options.signal ? combineSignals([options.signal, controller.signal]) : controller.signal, options.backend);
       await scheduler.recoverBackend(args[0], command, command === 'answer' ? JSON.parse(readFileSync(args[1]!, 'utf8')) : undefined);
       writeReport(store); console.log(`${store.state.status}: ${store.state.message}`);
       if (store.state.status === 'needs_attention') process.exitCode = 2;

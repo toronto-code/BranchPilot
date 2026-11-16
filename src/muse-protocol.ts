@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { BackendRequest, BackendResult } from './backend.js';
 import { museCapabilities, untrackedMuseWork, verifyHandshake, verifySessionAuthority, waitForMuseSetting } from './muse-contract.js';
 import { modelCatalogSchema, resolveMuseSettings } from './muse-models.js';
+import { checkCancellation } from './time.js';
 
 /** Only protocol facts: this is not a compatibility lock or a live-run gate. */
 export interface MuseProtocolExpectation {
@@ -23,7 +24,7 @@ export const terminalOutcome = (terminal: unknown): BackendResult['outcome'] => 
 
 /** Shared protocol engine. Simulations supply an in-memory host; live callers must verify the lock first. */
 export async function executeMuseProtocol(request: BackendRequest, expected: MuseProtocolExpectation, openHost: MuseHostFactory): Promise<BackendResult> {
-  request.signal.throwIfAborted();
+  checkCancellation(request.signal);
   let session: Session | undefined;
   let client: MuseClient | undefined;
   let nextMintIsTurn = false;
@@ -49,6 +50,9 @@ export async function executeMuseProtocol(request: BackendRequest, expected: Mus
         commandId, turnSubmission,
         ...(turnSubmission ? { method: 'turn/start', params: { commandId, sessionId: session!.sessionId, input } } : {}),
       }, turnSubmission ? { commandId } : undefined);
+      // Durable intent writes can themselves span suspension. Do not return a
+      // turn command ID to the SDK for transmission after its deadline.
+      if (turnSubmission) checkCancellation(request.signal);
       if (turnSubmission) { submissionPrepared = true; turnCommandId = commandId; }
       nextMintIsTurn = false;
       return commandId;
@@ -102,7 +106,7 @@ export async function executeMuseProtocol(request: BackendRequest, expected: Mus
     const msp = await host.initialize({ clientInfo: { name: 'branchpilot', version: '0.1.0' }, capabilities: museCapabilities(expected.questionContinuationVerified === true) });
     request.record('muse.initialized', msp.initializeResult);
     verifyHandshake(msp, expected, request.record);
-    request.signal.throwIfAborted();
+    checkCancellation(request.signal);
     client = new MuseClient(msp.connection, { durability: readSessionDurability(msp.initializeResult) });
     session = await client.startSession({ workspaceRoot: request.work.workspace, permissionProfile: expected.permissionProfile, requirePermissionProfile: true, approvalMode: expected.approvalMode });
     request.record('muse.session', { sessionId: session.sessionId, durability: client.durability }, { sessionId: session.sessionId });
@@ -159,7 +163,7 @@ export async function executeMuseProtocol(request: BackendRequest, expected: Mus
       providerId: confirmedModel.providerId, modelId: confirmedModel.modelId,
       ...(displayLabel !== undefined ? { displayLabel } : {}), ...(effort !== undefined ? { effort } : {}), reason: selection.reason,
     });
-    request.signal.throwIfAborted();
+    checkCancellation(request.signal);
     nextMintIsTurn = true;
     const turn = await session.sendUserTurn({ input });
     request.record('muse.turn', { turnId: turn.turnId }, { turnId: turn.turnId });

@@ -1,9 +1,11 @@
 import { createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { z } from 'zod';
 import { atomicWrite } from './store.js';
+import { checkCancellation, wallDeadline } from './time.js';
+import { assertMuseCadAdmission, campaignHistoryDigest, retainedHistoricalUnknown, type MuseCadBudget } from './campaign-budget.js';
 
 // This deliberately supports only the observed Wonder text Responses endpoint.
 // Prices are conservative: all input is charged at the uncached rate. No credit
@@ -14,33 +16,68 @@ const INPUT_LIMIT = 1_048_576;
 const OUTPUT_LIMIT = 131_072;
 const entrySchema = z.object({ id: z.number().int().positive(), state: z.enum(['reserved', 'settled', 'unknown']),
   reservedUsd: z.literal(RESERVATION_USD), chargedUsd: z.number().finite().nonnegative().max(RESERVATION_USD).optional(),
-  inputTokens: z.number().int().nonnegative().optional(), outputTokens: z.number().int().nonnegative().optional() }).strict();
-const ledgerSchema = z.object({ schemaVersion: z.literal(1), model: z.literal(MODEL), limitUsd: z.number().finite().positive().max(40),
-  entries: z.array(entrySchema) }).strict();
+  inputTokens: z.number().int().nonnegative().optional(), outputTokens: z.number().int().nonnegative().optional(),
+  reservedAt: z.string().datetime().optional(), providerResponseId: z.string().min(1).max(256).optional(),
+  providerRequestId: z.string().min(1).max(256).optional() }).strict();
+const ledgerSchema = z.discriminatedUnion('schemaVersion', [
+  z.object({ schemaVersion: z.literal(1), model: z.literal(MODEL), limitUsd: z.number().finite().positive().max(40), entries: z.array(entrySchema) }).strict(),
+  z.object({ schemaVersion: z.literal(2), model: z.literal(MODEL), limitUsd: z.number().finite().positive().max(80), entries: z.array(entrySchema),
+    origin: z.object({ ledgerSha256: z.string().regex(/^[a-f0-9]{64}$/), entryCount: z.number().int().nonnegative(),
+      entriesSha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
+  }).strict(),
+]);
 type Ledger = z.infer<typeof ledgerSchema>;
+
+export function readMuseSpendLedger(file: string): Ledger {
+  const ledger = ledgerSchema.parse(JSON.parse(readFileSync(file, 'utf8')));
+  if (ledger.entries.some((e, i) => e.id !== i + 1 || (e.state === 'settled' && (e.chargedUsd === undefined || e.inputTokens === undefined || e.outputTokens === undefined)))) throw Error('Invalid campaign ledger');
+  if (ledger.schemaVersion === 2 && (ledger.entries.length < ledger.origin.entryCount || campaignHistoryDigest(ledger.entries.slice(0, ledger.origin.entryCount)) !== ledger.origin.entriesSha256)) throw Error('Migrated campaign history changed');
+  return ledger;
+}
 
 export class MuseSpendLedger {
   private ledger: Ledger;
   private readonly lock: string;
-  constructor(private readonly file: string, limitUsd = 40) {
+  constructor(private readonly file: string, limitUsd = 40, private readonly cadBudget?: MuseCadBudget) {
+    if (cadBudget) {
+      if (resolve(cadBudget.ledgerFile) !== (existsSync(file) ? realpathSync(file) : resolve(file))) throw Error('CAD budget belongs to a different campaign ledger');
+      this.cadBudget = structuredClone(cadBudget);
+    }
     mkdirSync(dirname(file), { recursive: true });
     this.lock = `${file}.lock`;
     writeFileSync(this.lock, String(process.pid), { flag: 'wx', mode: 0o600 });
     try {
-      this.ledger = existsSync(file) ? ledgerSchema.parse(JSON.parse(readFileSync(file, 'utf8'))) : ledgerSchema.parse({ schemaVersion: 1, model: MODEL, limitUsd, entries: [] });
+      this.ledger = existsSync(file) ? readMuseSpendLedger(file) : ledgerSchema.parse({ schemaVersion: 1, model: MODEL, limitUsd, entries: [] });
+      if (this.ledger.schemaVersion === 2 && !cadBudget?.credits) throw Error('Credit-funded campaign requires its CAD cash policy');
       if (this.ledger.limitUsd !== limitUsd) throw Error('A campaign limit cannot change when reopening its ledger');
-      if (this.ledger.entries.some((e, i) => e.id !== i + 1 || (e.state === 'settled' && (e.chargedUsd === undefined || e.inputTokens === undefined || e.outputTokens === undefined)))) throw Error('Invalid campaign ledger');
+      if (cadBudget) assertMuseCadAdmission(cadBudget, this.ledger.entries);
       this.save();
     } catch (error) { unlinkSync(this.lock); throw error; }
   }
   private save() { atomicWrite(this.file, JSON.stringify(this.ledger, null, 2)); }
   snapshot() { return structuredClone(this.ledger); }
+  blockingUnsettled() { return this.snapshot().entries.filter((e, i) => e.state !== 'settled' && !retainedHistoricalUnknown(this.cadBudget, i, e)); }
   reserve(): number {
-    if (this.ledger.entries.some(e => e.state !== 'settled')) throw Error('Unsettled provider work blocks further paid requests');
+    if (this.cadBudget) assertMuseCadAdmission(this.cadBudget, this.ledger.entries);
+    if (this.blockingUnsettled().length) throw Error('Unsettled provider work blocks further paid requests');
     const committed = this.ledger.entries.reduce((n, e) => n + (e.chargedUsd ?? e.reservedUsd), 0);
     if (committed + RESERVATION_USD > this.ledger.limitUsd) throw Error('Campaign spending allowance cannot cover another request');
     const id = this.ledger.entries.length + 1;
-    this.ledger.entries.push({ id, state: 'reserved', reservedUsd: RESERVATION_USD }); this.save(); return id;
+    this.ledger.entries.push({ id, state: 'reserved', reservedUsd: RESERVATION_USD, reservedAt: new Date().toISOString() }); this.save(); return id;
+  }
+  observeProviderIdentity(id: number, identity: { responseId?: unknown; requestId?: unknown }): void {
+    const entry = this.ledger.entries.find(e => e.id === id);
+    if (!entry) throw Error('Unknown campaign request');
+    const parsed = z.object({ responseId: z.string().min(1).max(256).optional(), requestId: z.string().min(1).max(256).optional() }).strict().parse(identity);
+    const fields = [['providerResponseId', parsed.responseId], ['providerRequestId', parsed.requestId]] as const;
+    for (const [field, value] of fields) if (value !== undefined && entry[field] !== undefined && entry[field] !== value) throw Error('Provider response identity changed within one paid request');
+    let changed = false;
+    for (const [field, value] of fields) {
+      if (value === undefined) continue;
+      if (entry[field] === undefined) { entry[field] = value; changed = true; }
+    }
+    // Keep identifiers even if the process dies before terminal usage/EOF.
+    if (changed) this.save();
   }
   settle(id: number, usage: unknown): void {
     const entry = this.ledger.entries.find(e => e.id === id);
@@ -98,20 +135,32 @@ export function verifyMusePricing(data: unknown): boolean {
  * The host receives a random local token; every paid retry/child request must
  * independently pass admission. Unknown outcomes block the whole campaign.
  */
-export async function startMuseGateway(options: { key: string; ledgerFile: string; limitUsd?: number; fetcher?: typeof fetch }) {
-  const ledger = new MuseSpendLedger(options.ledgerFile, options.limitUsd);
+export async function startMuseGateway(options: { key: string; ledgerFile: string; limitUsd?: number; cadBudget?: MuseCadBudget; fetcher?: typeof fetch; signal?: AbortSignal; onUnknown?: (id: number) => void }) {
+  const ledger = new MuseSpendLedger(options.ledgerFile, options.limitUsd, options.cadBudget);
   const token = `LLM_0_${randomBytes(32).toString('hex')}`;
   const inflight = new Set<Promise<void>>();
-  const events: { method?: string; path?: string; status?: number; error?: string }[] = [];
+  const events: { method?: string; path?: string; status?: number; error?: string; requestId?: number; startedAt: string; finishedAt?: string; upstreamAt?: string; terminal?: boolean }[] = [];
   let catalogVerified = false;
+  let closing = false;
+  let closePromise: Promise<void> | undefined;
   const server = createServer((req, res) => {
     // A cancelled host can disconnect before the provider's final usage frame.
     // Wait for already admitted work to settle before considering a new call.
     const predecessors = [...inflight];
     const work = (async () => {
       let reservation: number | undefined;
-      const observation: typeof events[number] = { method: req.method, path: req.url }; events.push(observation);
+      let deadline: ReturnType<typeof wallDeadline> | undefined;
+      let notified = false;
+      const unknown = () => {
+        if (!notified && reservation !== undefined && ledger.snapshot().entries[reservation - 1]?.state === 'unknown') {
+          notified = true;
+          try { options.onUnknown?.(reservation); }
+          catch (error) { observation.error = `Unknown-billing notification failed: ${String(error).replaceAll(options.key, '[redacted]')}`; }
+        }
+      };
+      const observation: typeof events[number] = { method: req.method, path: req.url, startedAt: new Date().toISOString() }; events.push(observation);
       try {
+        if (closing) { res.writeHead(503).end(); return; }
         if (req.headers.authorization !== `Bearer ${token}`) { res.writeHead(401).end(); return; }
         const catalog = req.method === 'GET' && req.url === '/muse-code/models';
         const paid = req.method === 'POST' && ['/v1/responses', '/responses'].includes(req.url ?? '');
@@ -120,14 +169,25 @@ export async function startMuseGateway(options: { key: string; ledgerFile: strin
         for await (const chunk of req) { size += chunk.length; if (size > 512 * 1024) throw Error('Request exceeds the benchmark input limit'); chunks.push(chunk); }
         const body = paid ? validateMusePaidRequest(JSON.parse(Buffer.concat(chunks).toString('utf8'))) : undefined;
         if (paid) {
+          checkCancellation(options.signal);
           if (!catalogVerified) throw Error('Current model prices and limits have not been verified');
           await Promise.allSettled(predecessors);
+          if (closing) return;
+          checkCancellation(options.signal);
           if (res.destroyed) return;
           reservation = ledger.reserve();
+          observation.requestId = reservation;
+          observation.terminal = false;
+          checkCancellation(options.signal);
         }
+        // Already admitted provider work is drained independently of host/job
+        // cancellation to retain billing evidence. The wall watchdog still
+        // expires promptly after sleep; uncertainty never releases a reserve.
+        deadline = wallDeadline(Date.now() + 180_000, Error('Gateway response wall timeout'));
+        observation.upstreamAt = new Date().toISOString();
         const response = await (options.fetcher ?? fetch)(`https://api.meta.ai${paid ? '/v1/responses' : '/muse-code/models'}`, { method: req.method,
           headers: { authorization: `Bearer ${options.key}`, 'content-type': 'application/json', accept: req.headers.accept ?? 'application/json' },
-          ...(body ? { body: JSON.stringify(body) } : {}), redirect: 'error', signal: AbortSignal.timeout(180_000) });
+          ...(body ? { body: JSON.stringify(body) } : {}), redirect: 'error', signal: deadline.signal });
         observation.status = response.status;
         if (catalog) {
           const text = await response.text();
@@ -136,13 +196,25 @@ export async function startMuseGateway(options: { key: string; ledgerFile: strin
           }
           res.writeHead(response.status, { 'content-type': 'application/json' }).end(text); return;
         }
+        const providerRequestId = response.headers.get('x-request-id') ?? response.headers.get('request-id');
+        if (providerRequestId) ledger.observeProviderIdentity(reservation!, { requestId: providerRequestId });
         res.writeHead(response.status, { 'content-type': response.headers.get('content-type') ?? 'application/json' });
         let buffer = ''; let responseBytes = 0; let usage: unknown; let terminal = false;
+        const finish = () => {
+          terminal = true; observation.terminal = true;
+          // The provider's terminal usage is authoritative even if the transport
+          // later fails to deliver EOF. Never settle the same reservation twice.
+          if (response.ok && ledger.snapshot().entries[reservation! - 1]?.state === 'reserved') {
+            ledger.settle(reservation!, usage);
+            unknown();
+          }
+        };
         const event = (line: string) => {
           if (!line.startsWith('data:')) return;
           const data = line.slice(5).trim(); if (!data || data === '[DONE]') return;
-          const value = JSON.parse(data) as { type?: string; response?: { usage?: unknown } };
-          if (['response.completed', 'response.incomplete'].includes(value.type ?? '')) { terminal = true; usage = value.response?.usage; }
+          const value = JSON.parse(data) as { type?: string; response?: { id?: unknown; usage?: unknown } };
+          if (value.response?.id !== undefined) ledger.observeProviderIdentity(reservation!, { responseId: value.response.id });
+          if (['response.completed', 'response.incomplete'].includes(value.type ?? '') && !terminal) { usage = value.response?.usage; finish(); }
         };
         const decoder = new TextDecoder(); const sse = response.headers.get('content-type')?.includes('text/event-stream');
         if (response.body) for await (const chunk of response.body) {
@@ -153,17 +225,27 @@ export async function startMuseGateway(options: { key: string; ledgerFile: strin
         }
         buffer += decoder.decode();
         if (sse) { if (buffer.trim()) event(buffer.trimEnd()); }
-        else if (response.ok) { const data = JSON.parse(buffer) as { usage?: unknown; status?: string }; usage = data.usage; terminal = ['completed', 'incomplete'].includes(data.status ?? ''); }
-        if (response.ok && terminal) ledger.settle(reservation!, usage); else ledger.unknown(reservation!);
+        else if (response.ok) {
+          const data = JSON.parse(buffer) as { id?: unknown; usage?: unknown; status?: string };
+          if (data.id !== undefined) ledger.observeProviderIdentity(reservation!, { responseId: data.id });
+          usage = data.usage; if (['completed', 'incomplete'].includes(data.status ?? '')) finish();
+        }
+        observation.terminal = terminal;
+        if (!response.ok || !terminal) ledger.unknown(reservation!);
+        unknown();
         res.end();
       } catch (error) {
         observation.error = error instanceof z.ZodError ? `Unpriced request fields: ${error.issues.map(issue => `${issue.path.join('.')}:${issue.code}${issue.code === 'invalid_literal' && issue.path.at(-1) === 'type' ? `(${String(issue.received).slice(0, 64)})` : ''}`).join(', ')}` : String(error).replaceAll(options.key, '[redacted]');
         if (reservation !== undefined) ledger.unknown(reservation);
+        unknown();
         // A local policy refusal is permanent. 429 makes the host repeatedly
         // retry a request that cannot become admissible, wasting its deadline.
-        if (!res.headersSent) res.writeHead(403, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ error: { message: 'BranchPilot spending guard refused or could not settle this request; inspect the local ledger.', type: 'budget_guard' } }));
-      }
+        if (!res.headersSent) {
+          res.writeHead(403, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ error: { message: 'BranchPilot spending guard refused or could not settle this request; inspect the local ledger.', type: 'budget_guard' } }));
+        } else if (reservation !== undefined && ledger.snapshot().entries[reservation - 1]?.state === 'settled') res.end();
+        else res.destroy(); // Do not append JSON to an already-started SSE body.
+      } finally { deadline?.dispose(); observation.finishedAt = new Date().toISOString(); }
     })();
     inflight.add(work); void work.finally(() => inflight.delete(work));
   });
@@ -171,5 +253,14 @@ export async function startMuseGateway(options: { key: string; ledgerFile: strin
   catch (error) { ledger.close(); throw error; }
   const address = server.address(); if (!address || typeof address === 'string') throw Error('Gateway has no local address');
   return { url: `http://127.0.0.1:${address.port}`, token, ledger, events, catalogReady: () => catalogVerified,
-    close: async () => { server.close(); server.closeIdleConnections(); await Promise.allSettled([...inflight]); server.closeAllConnections(); ledger.close(); } };
+    close: () => closePromise ??= (async () => {
+      closing = true;
+      const stopped = new Promise<void>(resolve => { server.close(() => resolve()); });
+      // Drop local uploads/queued clients before waiting. Already admitted
+      // upstream responses drain independently to preserve their billing proof.
+      server.closeAllConnections();
+      while (inflight.size) await Promise.allSettled([...inflight]);
+      await stopped;
+      ledger.close();
+    })() };
 }

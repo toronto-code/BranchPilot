@@ -14,6 +14,7 @@ import { verifyMuseLock } from './muse.js';
 import { verifyRun } from './project.js';
 import { capture, rejectNestedStorage } from './workspaces.js';
 import { atomicWrite, hash, id, RunStore } from './store.js';
+import { checkCancellation, combineSignals, wallDeadline } from './time.js';
 
 export const comparisonSchema = z.object({
   schemaVersion: z.literal(1), armSeconds: z.number().int().min(1).max(86400).default(3600),
@@ -105,7 +106,7 @@ export async function runComparisonArm(directory: string, arm: ComparisonArm, op
   if (live && (!options.allowLive || !options.allowProviderCost)) throw Error('Muse comparison execution requires --allow-live and --allow-provider-cost');
   const lock = new RunStore(join(directory, 'job-lock'), true);
   const armDirectory = join(directory, arm); const file = join(armDirectory, 'job.json');
-  let timer: NodeJS.Timeout | undefined; let job: ArmRecord | undefined;
+  let deadline: ReturnType<typeof wallDeadline> | undefined; let job: ArmRecord | undefined;
   const started = performance.now(); const startedAt = new Date().toISOString();
   try {
     if (existsSync(file)) throw Error('This comparison version was already started; never replay a partial or uncertain job');
@@ -117,31 +118,43 @@ export async function runComparisonArm(directory: string, arm: ComparisonArm, op
         if (entry.config.backend.kind === 'muse') verifyMuseLock(entry.config.backend.binary, entry.config.backend.compatibilityLock);
       }
     } finally { assets.close(); }
-    options.signal?.throwIfAborted();
+    checkCancellation(options.signal);
     mkdirSync(armDirectory, { recursive: true });
     job = { startedAt, deadline: new Date(Date.parse(startedAt) + plan.spec.armSeconds * 1000).toISOString(), trials: [] };
     writeFileSync(file, JSON.stringify(job, null, 2), { flag: 'wx' });
-    const controller = new AbortController();
-    timer = setTimeout(() => controller.abort(Error('Per-version comparison wall budget reached')), Math.max(1, Date.parse(job.deadline) - Date.now()));
-    const signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
+    deadline = wallDeadline(Date.parse(job.deadline), Error('Per-version comparison wall budget reached'));
+    const signal = options.signal ? combineSignals([options.signal, deadline.signal]) : deadline.signal;
     for (const entry of plan.cases) {
+      deadline.check();
       if (signal.aborted || (Date.parse(job.deadline) - Date.now()) / 1000 < plan.spec.taskSeconds) break;
       const trial: TrialRecord = { caseId: entry.id }; job.trials.push(trial); writeJSON(file, job);
       const trialStart = performance.now(); let store: RunStore | undefined;
+      const taskDeadline = wallDeadline(Date.now() + plan.spec.taskSeconds * 1000, Error('Comparison task wall budget reached'));
+      const taskSignal = combineSignals([signal, taskDeadline.signal]);
       try {
         store = createRun(comparisonConfig(entry.config, plan.spec, arm), join(armDirectory, 'runs'));
         trial.runDirectory = store.dir; writeJSON(file, job);
         const m = store.state.manifest;
         if (m.initialSnapshot !== entry.identity.input || JSON.stringify(m.evaluators.map(e => e.definitionDigest)) !== JSON.stringify(entry.identity.evaluators) || m.environment !== entry.identity.environment) throw Error('Task source changed between preflight and run creation');
-        const state = await runController(store, { signal });
+        checkCancellation(taskSignal);
+        const state = await runController(store, { signal: taskSignal });
         if (state.status === 'needs_attention' || state.status === 'failed') trial.error = state.message ?? state.status;
-        if (signal.aborted) trial.error = 'Comparison job interrupted; this is not a complete timed task result';
+        if (state.status === 'cancelled' || state.message?.startsWith('Assessment incomplete:')) trial.error = state.message ?? state.status;
+        if (state.evaluations.some(e => e.failureType === 'timeout')) trial.error = 'Evaluator timed out; comparison execution stopped';
+        deadline.check();
+        taskDeadline.check();
+        if (taskSignal.aborted) trial.error = `Comparison job interrupted: ${String(taskSignal.reason)}; this is not a complete timed task result`;
       } catch (error) { trial.error = String(error); }
-      finally { store?.close(); trial.seconds = (performance.now() - trialStart) / 1000; writeJSON(file, job); }
+      finally {
+        taskDeadline.dispose();
+        store?.close(); trial.seconds = (performance.now() - trialStart) / 1000;
+        if (trial.seconds > plan.spec.taskSeconds + entry.config.budget.cancellationGraceSeconds) trial.error ??= 'Task wall allowance exceeded; comparison execution stopped';
+        writeJSON(file, job);
+      }
       if (trial.error) break;
     }
   } finally {
-    if (timer) clearTimeout(timer);
+    deadline?.dispose();
     if (job) { job.finishedAt = new Date().toISOString(); job.seconds = (performance.now() - started) / 1000; writeJSON(file, job); }
     lock.close();
     if (job) writeComparisonReport(directory);

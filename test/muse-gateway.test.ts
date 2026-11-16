@@ -41,6 +41,17 @@ test('valid usage releases only the unused reservation, not the whole charge', t
   assert.equal(ledger.reserve(), 2);
 });
 
+test('provider identity cannot change within a reservation or rewrite its saved identity', t => {
+  const root = mkdtempSync(join(tmpdir(), 'muse-spend-'));
+  const ledger = new MuseSpendLedger(join(root, 'ledger.json'));
+  t.after(() => { ledger.close(); rmSync(root, { recursive: true, force: true }); });
+  const id = ledger.reserve();
+  ledger.observeProviderIdentity(id, { responseId: 'resp_original', requestId: 'original-request' });
+  assert.throws(() => ledger.observeProviderIdentity(id, { responseId: 'resp_foreign' }), /identity changed/);
+  assert.equal(ledger.snapshot().entries[0]!.providerResponseId, 'resp_original');
+  assert.equal(ledger.snapshot().entries[0]!.state, 'reserved');
+});
+
 test('gateway permits frontier text/function requests and bounds output explicitly', () => {
   const body = validateMusePaidRequest({ model: 'muse-wonder-1.0', input: [{ role: 'user', content: 'Fix the bug' }], tools: [{ type: 'function', name: 'edit', parameters: {} }], stream: true });
   assert.equal(body.max_output_tokens, 131072);

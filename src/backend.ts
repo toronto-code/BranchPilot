@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { Config, Hypothesis, Revision, Work } from './types.js';
 import { contained } from './workspaces.js';
+import { checkCancellation } from './time.js';
 
 export interface BackendRequest {
   config: Config; work: Work; base: Revision; prompt: string; signal: AbortSignal;
@@ -36,7 +37,7 @@ export class FixtureBackend implements Backend {
     try {
       await delay(plan.delayMs, undefined, { signal: request.signal });
       for (const [path, contents] of Object.entries(plan.files)) {
-        request.signal.throwIfAborted();
+        checkCancellation(request.signal);
         const target = contained(request.work.workspace, path);
         if (contents === null) rmSync(target, { force: true });
         else { mkdirSync(dirname(target), { recursive: true }); writeFileSync(target, contents); }

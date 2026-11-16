@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
 import { StringDecoder } from 'node:string_decoder';
-import { MAX_TIMEOUT_MS } from './time.js';
+import { checkCancellation, MAX_TIMEOUT_MS, wallDeadline } from './time.js';
 
 export interface ProcessResult { code: number | null; signal: string | null; stdout: string; stderr: string; timedOut: boolean; cancelled: boolean; truncated: boolean; stopped: boolean; seconds: number }
 export function sandboxCommand(command: string, args: string[], reads: string[], writes: string[], network = false): [string, string[]] {
@@ -18,7 +18,8 @@ export function sandboxCommand(command: string, args: string[], reads: string[],
   return ['/usr/bin/sandbox-exec', ['-p', profile, command, ...args]];
 }
 export function runProcess(command: string, args: string[], options: { cwd: string; timeoutMs: number; graceMs: number; signal?: AbortSignal; env?: NodeJS.ProcessEnv }): Promise<ProcessResult> {
-  if (options.signal?.aborted) return Promise.resolve({ code: null, signal: null, stdout: '', stderr: '', timedOut: false, cancelled: true, truncated: false, stopped: true, seconds: 0 });
+  try { checkCancellation(options.signal); }
+  catch { return Promise.resolve({ code: null, signal: null, stdout: '', stderr: '', timedOut: false, cancelled: true, truncated: false, stopped: true, seconds: 0 }); }
   if (!Number.isFinite(options.timeoutMs) || options.timeoutMs <= 0 || options.timeoutMs > MAX_TIMEOUT_MS || !Number.isFinite(options.graceMs) || options.graceMs < 0 || options.graceMs > MAX_TIMEOUT_MS) throw Error('Worker timeout/grace exceeds the supported timer range');
   return new Promise((resolve, reject) => {
     const began = Date.now(); let diagnostics = ''; let truncated = false; let timedOut = false; let cancelled = false; let escalation: NodeJS.Timeout | undefined;
@@ -32,7 +33,10 @@ export function runProcess(command: string, args: string[], options: { cwd: stri
     const kill = (signal: NodeJS.Signals) => { if (!child.pid) return; try { process.kill(process.platform === 'win32' ? child.pid : -child.pid, signal); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') diagnostics = (diagnostics + `\nCould not ${signal} worker: ${String(error)}`).slice(0, 4096); } };
     const stop = () => { kill('SIGTERM'); if (!escalation) escalation = setTimeout(() => kill('SIGKILL'), options.graceMs); };
     const abort = () => { cancelled = true; stop(); };
-    const timer = setTimeout(() => { timedOut = true; stop(); }, Math.max(1, options.timeoutMs));
+    const deadline = wallDeadline(began + options.timeoutMs, Error('Worker timeout'));
+    const timeout = () => { timedOut = true; stop(); };
+    deadline.signal.addEventListener('abort', timeout, { once: true });
+    if (deadline.signal.aborted) timeout();
     options.signal?.addEventListener('abort', abort, { once: true });
     if (options.signal?.aborted) abort();
     const collect = (stream: ReturnType<typeof output>, chunk: Buffer) => {
@@ -47,11 +51,12 @@ export function runProcess(command: string, args: string[], options: { cwd: stri
     };
     child.stdout.on('data', (chunk: Buffer) => { collect(stdout, chunk); });
     child.stderr.on('data', (chunk: Buffer) => { collect(stderr, chunk); });
-    const cleanup = () => { clearTimeout(timer); if (escalation) clearTimeout(escalation); options.signal?.removeEventListener('abort', abort); };
+    const cleanup = () => { deadline.dispose(); if (escalation) clearTimeout(escalation); options.signal?.removeEventListener('abort', abort); };
     child.on('error', error => { cleanup(); reject(error); });
     // An exited parent can leave children holding its output pipes. Stop its group.
     child.on('exit', () => { if (alive()) stop(); });
     child.on('close', (code, signal) => {
+      deadline.check();
       cleanup(); if (alive()) kill('SIGKILL');
       resolve({ code, signal, stdout: decode(stdout), stderr: decode(stderr) + diagnostics, timedOut, cancelled, truncated, stopped: !alive(), seconds: (Date.now() - began) / 1000 });
     });

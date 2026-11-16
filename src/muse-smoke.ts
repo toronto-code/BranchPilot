@@ -11,6 +11,7 @@ import { atomicWrite, hash, id, RunStore } from './store.js';
 import { runProcess, sandboxCommand } from './process.js';
 import { contained, readRegularText, rejectNestedStorage } from './workspaces.js';
 import { museEnvironment, museLaunchArguments } from './muse-environment.js';
+import { checkCancellation, combineSignals, wallDeadline } from './time.js';
 
 export const smokeSpecSchema = z.object({
   schemaVersion: z.literal(1), binary: z.string().min(1), runtimeHome: z.string().refine(isAbsolute),
@@ -68,7 +69,8 @@ export async function runSmokeCase(directory: string, name: SmokeCase, options: 
 async function executeSmokeCase(directory: string, name: SmokeCase, options: { signal?: AbortSignal; openHost?: MuseHostFactory }): Promise<void> {
   const plan = readPlan(directory); const spec = plan.spec;
   if (hash(readFileSync(spec.binary)) !== plan.binaryDigest || JSON.stringify(installedMuseSDK()) !== JSON.stringify(plan.sdk)) throw Error('SDK or binary changed after smoke preparation');
-  options.signal?.throwIfAborted();
+  checkCancellation(options.signal);
+  const began = Date.now();
   const caseDirectory = join(directory, name);
   // Exclusive creation is intentional: crashes/unknown outcomes never authorize automatic replay.
   mkdirSync(caseDirectory);
@@ -79,7 +81,8 @@ async function executeSmokeCase(directory: string, name: SmokeCase, options: { s
   const controller = new AbortController();
   const abort = () => controller.abort(options.signal?.reason);
   options.signal?.addEventListener('abort', abort, { once: true }); if (options.signal?.aborted) abort();
-  const timer = setTimeout(() => controller.abort(Error('Smoke timeout')), spec.timeoutSeconds * 1000);
+  const timer = wallDeadline(began + spec.timeoutSeconds * 1000, Error('Smoke timeout'));
+  const signal = combineSignals([controller.signal, timer.signal, ...(options.signal ? [options.signal] : [])]);
   const events: { kind: string; data: unknown }[] = []; let bytes = 0; let limited = false; let host: MuseHost | undefined;
   const record: BackendRequest['record'] = (kind, data) => {
     const value = { kind, data }; const encoded = JSON.stringify(value);
@@ -97,7 +100,7 @@ async function executeSmokeCase(directory: string, name: SmokeCase, options: { s
       const forbidden = join(directory, 'forbidden-write.txt'); const canary = join(directory, 'private-canary.txt');
       const script = `const fs=require('node:fs');const result={};for(const [key,fn] of [['read',()=>fs.readFileSync(${JSON.stringify(canary)})],['write',()=>fs.writeFileSync(${JSON.stringify(forbidden)},'unexpected')]]){try{fn();result[key]='allowed'}catch(e){result[key]=e.code}}console.log(JSON.stringify(result));`;
       const [probe, probeArgs] = sandboxCommand(process.execPath, ['-e', script], [workspace, spec.runtimeHome, spec.binary], [workspace, spec.runtimeHome], true);
-      const result = await runProcess(probe, probeArgs, { cwd: workspace, timeoutMs: spec.timeoutSeconds * 1000, graceMs: spec.cancellationGraceSeconds * 1000, signal: controller.signal, env: { PATH: process.env.PATH, HOME: spec.runtimeHome, TMPDIR: scratch } });
+      const result = await runProcess(probe, probeArgs, { cwd: workspace, timeoutMs: spec.timeoutSeconds * 1000, graceMs: spec.cancellationGraceSeconds * 1000, signal, env: { PATH: process.env.PATH, HOME: spec.runtimeHome, TMPDIR: scratch } });
       record('smoke.isolation_probe', result);
       atomicWrite(join(caseDirectory, 'result.json'), JSON.stringify({ mode, result, observation: result.stopped && result.code === 0 ? JSON.parse(result.stdout) : null }));
     } else {
@@ -108,7 +111,7 @@ async function executeSmokeCase(directory: string, name: SmokeCase, options: { s
       };
       const work: BackendRequest['work'] = { id: id(), kind: 'attempt', phase: 'search', revisionId: 'smoke-baseline', reservation: { tokens: 0, attempts: 1, experiments: 0, workSeconds: spec.timeoutSeconds }, state: 'running', intent: 'smoke', workspace, index: 0, epoch: 0 };
       const base: BackendRequest['base'] = { id: work.revisionId, candidateId: 'smoke', parentIds: [], snapshot: '', proposal: '', hypotheses: [], depth: 0, createdAt: new Date().toISOString() };
-      const result = await executeMuseProtocol({ config: plan.config, work, base, record, signal: controller.signal, prompt: `Compatibility smoke experiment. Edit only smoke.txt to contain exactly ${JSON.stringify(plan.expectedEdit)}. Do not request additional agents, workers, or detached processes. ${name === 'completion' ? 'Finish after this edit.' : 'After the edit, continue describing the change until interrupted.'}` }, { ...spec, approvalMode: 'denyUnmatched' }, open);
+      const result = await executeMuseProtocol({ config: plan.config, work, base, record, signal, prompt: `Compatibility smoke experiment. Edit only smoke.txt to contain exactly ${JSON.stringify(plan.expectedEdit)}. Do not request additional agents, workers, or detached processes. ${name === 'completion' ? 'Finish after this edit.' : 'After the edit, continue describing the change until interrupted.'}` }, { ...spec, approvalMode: 'denyUnmatched' }, open);
       let edited: boolean | null = null;
       if (result.stopped && result.outcome !== 'unknown') {
         try { edited = readRegularText(contained(workspace, 'smoke.txt'), 4096) === plan.expectedEdit; }
@@ -122,7 +125,7 @@ async function executeSmokeCase(directory: string, name: SmokeCase, options: { s
     atomicWrite(join(caseDirectory, 'error.json'), JSON.stringify({ error: String(error), outcome: 'unknown', mode }));
     throw error;
   } finally {
-    clearTimeout(timer); options.signal?.removeEventListener('abort', abort); writeSmokeReport(directory);
+    timer.dispose(); options.signal?.removeEventListener('abort', abort); writeSmokeReport(directory);
   }
 }
 

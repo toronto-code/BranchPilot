@@ -11,6 +11,7 @@ import { atomicWrite, hash } from './store.js';
 import type { Resources, State } from './types.js';
 import { rejectNestedStorage } from './workspaces.js';
 import { midpoint } from './statistics.js';
+import { checkCancellation } from './time.js';
 
 export const benchmarkSchema = z.object({
   schemaVersion: z.literal(1), repetitions: z.number().int().min(1).max(10).default(3),
@@ -51,7 +52,7 @@ export async function runBenchmark(file: string, directory: string, signal?: Abo
   try {
     // Interleave cases by repetition to reduce systematic ordering effects.
     for (let repetition = 0; repetition < suite.repetitions; repetition++) for (let index = 0; index < suite.cases.length; index++) {
-      signal?.throwIfAborted();
+      checkCancellation(signal);
       const store = createRun(configs[index]!, join(directory, 'runs'));
       try {
         const started = performance.now(); const state = await runController(store, { signal }); const budget = budgetView(state, true);

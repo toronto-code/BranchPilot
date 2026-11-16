@@ -10,6 +10,7 @@ import { sandboxCommand } from './process.js';
 import { executeMuseProtocol } from './muse-protocol.js';
 import { recoverMuseProtocol } from './muse-recovery.js';
 import { museEnvironment, museLaunchArguments } from './muse-environment.js';
+import { checkCancellation } from './time.js';
 
 export const SDK_VERSION = '1.4.14';
 export function installedMuseSDK(): { version: string; entry: string; digest: string } {
@@ -73,7 +74,7 @@ export class MuseBackend implements Backend {
     const lock = verifyMuseLock(config.binary, config.compatibilityLock);
     if (request.backendIdentity && hash(JSON.stringify({ kind: 'muse', ...lock })) !== hash(JSON.stringify(request.backendIdentity))) throw Error('Muse compatibility settings differ from the frozen run manifest');
     if (request.config.budget.maxConcurrency > 1 && !lock.concurrentIsolationVerified) throw Error('Concurrent Muse execution remains gated until isolation between concurrent hosts is verified');
-    request.signal.throwIfAborted();
+    checkCancellation(request.signal);
     let runtimeHome = lock.runtimeHome;
     if (lock.isolateSessionHomes) {
       if (config.apiKeyEnv !== 'META_API_KEY') throw Error('Isolated session homes require explicit environment authentication');

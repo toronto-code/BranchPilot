@@ -93,7 +93,26 @@ for (const grouped of [true, false]) {
       alternatives(c, 2);
       c.task.evaluators[0]!.resourceGroup = grouped ? 'benchmark-cpu' : undefined;
       const trace = join(root, 'trace.jsonl');
-      writeFileSync(join(root, 'evaluators/repair.mjs'), `import {appendFileSync} from 'node:fs'; const file=${JSON.stringify(trace)}; appendFileSync(file,JSON.stringify({kind:'start',pid:process.pid})+'\\n'); setTimeout(()=>{appendFileSync(file,JSON.stringify({kind:'end',pid:process.pid})+'\\n');console.log(JSON.stringify({validity:'pass',checks:[{id:'addition',outcome:'pass'}]}));},120);`);
+      // Independent workers rendezvous explicitly: disk writes and other test
+      // processes can delay the second launch beyond a fixed 120 ms sleep.
+      c.task.evaluators[0]!.timeoutSeconds = 10;
+      writeFileSync(join(root, 'evaluators/repair.mjs'), `
+        import {appendFileSync,readFileSync} from 'node:fs';
+        import {join} from 'node:path';
+        import {setTimeout as delay} from 'node:timers/promises';
+        const file=${JSON.stringify(trace)};
+        const candidate=readFileSync(join(process.argv[2],'calculator.mjs'),'utf8').includes('// alternative');
+        appendFileSync(file,JSON.stringify({kind:'start',pid:process.pid,candidate})+'\\n');
+        if (${!grouped} && candidate) {
+          const deadline=Date.now()+5000;
+          while (readFileSync(file,'utf8').trim().split('\\n').map(JSON.parse).filter(e=>e.kind==='start'&&e.candidate).length<2) {
+            if (Date.now()>=deadline) throw Error('Independent evaluator did not start');
+            await delay(5);
+          }
+        } else if (${grouped}) await delay(120);
+        appendFileSync(file,JSON.stringify({kind:'end',pid:process.pid})+'\\n');
+        console.log(JSON.stringify({validity:'pass',checks:[{id:'addition',outcome:'pass'}]}));
+      `);
     });
     await runController(store);
     const trace = readFileSync(join(root, 'trace.jsonl'), 'utf8').trim().split('\n').map(row => JSON.parse(row));

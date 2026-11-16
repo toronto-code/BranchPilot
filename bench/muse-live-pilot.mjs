@@ -1,19 +1,22 @@
 import { parseArgs } from 'node:util';
 import { mkdirSync, readFileSync, writeFileSync, existsSync, unlinkSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
-import { startMuseGateway } from '../dist/src/muse-gateway.js';
+import { readMuseSpendLedger, startMuseGateway } from '../dist/src/muse-gateway.js';
+import { assertMuseCadAdmission, loadMuseCadBudget } from '../dist/src/campaign-budget.js';
 import { museBenchmarkSettings } from '../dist/src/muse-environment.js';
 import { prepareComparison, runComparisonArm, writeComparisonReport } from '../dist/src/comparison.js';
 import { installedMuseSDK } from '../dist/src/muse.js';
 import { hash } from '../dist/src/store.js';
 import { evaluatorSource } from './pilot-tasks.mjs';
 
-const { values: args } = parseArgs({ options: { binary: { type: 'string' }, home: { type: 'string' }, out: { type: 'string' }, ledger: { type: 'string' }, evidence: { type: 'string' }, 'key-file': { type: 'string' }, 'allow-provider-cost': { type: 'boolean' }, suite: { type: 'string', default: 'original' } } });
+const { values: args } = parseArgs({ options: { binary: { type: 'string' }, home: { type: 'string' }, out: { type: 'string' }, ledger: { type: 'string' }, budget: { type: 'string' }, evidence: { type: 'string' }, 'key-file': { type: 'string' }, 'allow-provider-cost': { type: 'boolean' }, suite: { type: 'string', default: 'original' } } });
 if (!['original', 'confirmation'].includes(args.suite)) throw Error('--suite must be original or confirmation');
 const taskModule = new URL(args.suite === 'confirmation' ? './confirmation-tasks.mjs' : './pilot-tasks.mjs', import.meta.url);
 const { pilotTasks } = await import(taskModule.href);
-for (const key of ['binary', 'home', 'out', 'ledger', 'evidence']) if (!args[key]) throw Error(`--${key} is required`);
+for (const key of ['binary', 'home', 'out', 'ledger', 'budget', 'evidence']) if (!args[key]) throw Error(`--${key} is required`);
 if (!args['allow-provider-cost']) throw Error('Live pilot requires --allow-provider-cost');
+const cadBudget = loadMuseCadBudget(resolve(args.budget), resolve(args.ledger));
+assertMuseCadAdmission(cadBudget, readMuseSpendLedger(resolve(args.ledger)).entries);
 const binary = resolve(args.binary), home = resolve(args.home), out = resolve(args.out), evidence = resolve(args.evidence);
 const key = args['key-file'] ? readFileSync(resolve(args['key-file']), 'utf8').trim() : process.env.META_API_KEY;
 if (!key) throw Error('Supply META_API_KEY or --key-file');
@@ -42,7 +45,7 @@ const expectedTools = museBenchmarkSettings('http://127.0.0.1:1').run.toolset;
 if (!configured.length || configured.some(e => e.reminder_roster != null || e.delegation_posture?.state !== 'inactive' || JSON.stringify(e.toolset?.active_tools) !== JSON.stringify(expectedTools))) throw Error('Observed native tool/worker configuration differs from the benchmark profile');
 
 mkdirSync(out);
-const gateway = await startMuseGateway({ key, ledgerFile: resolve(args.ledger), limitUsd: 40 });
+const gateway = await startMuseGateway({ key, ledgerFile: resolve(args.ledger), limitUsd: readMuseSpendLedger(resolve(args.ledger)).limitUsd, cadBudget });
 const settingsFile = join(home, '.config/muse/settings.json'); mkdirSync(join(home, '.config/muse'), { recursive: true });
 const oldSettings = existsSync(settingsFile) ? readFileSync(settingsFile) : undefined;
 const oldKey = process.env.META_API_KEY;
@@ -96,13 +99,13 @@ try {
     await runComparisonArm(comparison, arm, { signal: controller.signal, allowLive: true, allowProviderCost: true });
     const report = writeComparisonReport(comparison);
     console.log(JSON.stringify({ arm, outcomes: report.outcomes, totals: report.totals, reasons: report.qualityReasons }));
-    if (gateway.ledger.snapshot().entries.some(e => e.state !== 'settled')) throw Error('Unsettled provider request; stopping the campaign');
+    if (gateway.ledger.blockingUnsettled().length > 0) throw Error('Unsettled provider request; stopping the campaign');
     const job = JSON.parse(readFileSync(join(comparison, arm, 'job.json'), 'utf8'));
     if (job.trials.some(trial => trial.error)) throw Error(`${arm} encountered an execution failure; inspect the saved evidence before spending on another version`);
   }
 } finally {
   await gateway.close();
-  writeFileSync(join(out, 'gateway.json'), JSON.stringify({ events: gateway.events, ledger: gateway.ledger.snapshot() }, null, 2));
+  writeFileSync(join(out, 'gateway.json'), JSON.stringify({ events: gateway.events, ledger: gateway.ledger.snapshot(), cadBudget }, null, 2));
   if (oldSettings) writeFileSync(settingsFile, oldSettings); else if (existsSync(settingsFile)) unlinkSync(settingsFile);
   if (oldKey === undefined) delete process.env.META_API_KEY; else process.env.META_API_KEY = oldKey;
   process.off('SIGINT', stop); process.off('SIGTERM', stop);

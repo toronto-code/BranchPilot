@@ -1,6 +1,7 @@
 import { createUuidV7Mint, MuseClient, readSessionDurability } from '@muse-code/sdk';
 import type { Session, Turn } from '@muse-code/sdk';
 import { z } from 'zod';
+import { checkCancellation } from './time.js';
 import type { BackendAnswer, BackendRequest, BackendResult } from './backend.js';
 import type { MuseHostFactory, MuseProtocolExpectation } from './muse-protocol.js';
 import { terminalOutcome } from './muse-protocol.js';
@@ -25,13 +26,14 @@ export async function recoverMuseProtocol(request: BackendRequest, expected: Mus
   if (!work.sessionId || !work.commandId) throw Error('Recovery needs the durable session and original command IDs');
   if (answer && !work.turnId) throw Error('Answering requires an observed turn ID');
   if (answer && work.untrackedWork) throw Error('Untracked child work requires independent termination and usage resolution before continuation');
-  request.signal.throwIfAborted();
+  checkCancellation(request.signal);
   let answerMint = false; let answerCommandId: string | undefined;
   const mint = createUuidV7Mint();
   const host = openHost({ mintCommandId: () => {
     const commandId = mint();
     if (answerMint) {
       request.record('muse.answer_prepared', { commandId, method: 'userInput/answer', params: { commandId, sessionId: work.sessionId, ...answer } });
+      checkCancellation(request.signal);
       answerCommandId = commandId; answerMint = false;
     } else request.record('muse.recovery_command_prepared', { commandId });
     return commandId;
@@ -52,7 +54,7 @@ export async function recoverMuseProtocol(request: BackendRequest, expected: Mus
     request.record('muse.recovery_initialized', msp.initializeResult);
     verifyHandshake(msp, expected, request.record);
     if (readSessionDurability(msp.initializeResult).kind !== 'durable') throw Error('Host offers no durable session recovery guarantee');
-    request.signal.throwIfAborted();
+    checkCancellation(request.signal);
     const raw = await msp.connection.request('session/read', { sessionId: work.sessionId, excludeItems: false });
     request.record('muse.recovery_read', raw);
     const read = readSchema.parse(raw);
@@ -70,7 +72,7 @@ export async function recoverMuseProtocol(request: BackendRequest, expected: Mus
     const cursors = new Set<string>(); let cursor: string | undefined;
     // Read the served history without taking a writer lease or re-running work.
     for (let page = 0; ; page++) {
-      request.signal.throwIfAborted();
+      checkCancellation(request.signal);
       if (page >= 100) throw Error('Recovery history exceeds the bounded page limit');
       const rawPage = await msp.connection.request('view/page', { sessionId: work.sessionId, limit: 1000, direction: 'forward', ...(cursor ? { cursor } : {}) });
       const next = pageSchema.parse(rawPage);
@@ -136,7 +138,7 @@ export async function recoverMuseProtocol(request: BackendRequest, expected: Mus
         const event = [...events].reverse().find(e => e.method === 'session/reasoningEffortChanged');
         if ((event?.params.reasoningEffort ?? effort?.reasoningEffort) !== expectedEffort) throw Error('Resumed effort is unconfirmed');
       }
-      request.signal.throwIfAborted();
+      checkCancellation(request.signal);
       turn = session.turn(targetId);
       let cancelRequested = false;
       cancelTurn = () => {

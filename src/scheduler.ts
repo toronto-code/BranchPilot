@@ -20,6 +20,7 @@ import { executionEnvironment } from './environment.js';
 import { HoldoutReuseError, recordEvaluationExposure } from './evaluation-history.js';
 import { museEnvironment } from './muse-environment.js';
 import { buildAttemptPrompt } from './handoff.js';
+import { checkCancellation, combineSignals, wallDeadline } from './time.js';
 
 export class InteractionRequired extends Error {}
 export interface Completion { work: Work; revision?: Revision; evaluation?: Evaluation; clearInput?: boolean }
@@ -67,7 +68,7 @@ export class Scheduler {
     }
   }
   private reserve(work: Work, source?: { work: Work; evaluatorId: string }): void {
-    this.signal.throwIfAborted();
+    checkCancellation(this.signal);
     const state = this.store.state;
     if (work.kind === 'attempt' || state.manifest.evaluators.find(evaluator => evaluator.spec.id === work.evaluatorId)?.spec.kind === 'executable') this.verifyEnvironment();
     if (work.kind === 'attempt') this.verifyBackend();
@@ -181,17 +182,23 @@ export class Scheduler {
     const { prompt, retry } = this.store.getJSON<{ prompt: string; retry?: boolean }>(work.intent);
     const base = state.revisions.find(r => r.id === work.revisionId)!;
     const workId = work.id; const candidateId = work.candidateId!;
-    try { this.signal.throwIfAborted(); materialize(this.store, base.snapshot, work.workspace); }
+    try { checkCancellation(this.signal); materialize(this.store, base.snapshot, work.workspace); checkCancellation(this.signal); }
     catch (error) { this.releasePrepared([work]); throw error; }
     work = this.start(work);
     const controller = new AbortController();
     const onAbort = () => controller.abort(this.signal.reason);
     this.signal.addEventListener('abort', onAbort, { once: true });
     if (this.signal.aborted) onAbort();
-    const timeout = setTimeout(() => controller.abort(new Error('Attempt timeout')), state.config.budget.perAttempt.timeoutSeconds * 1000);
-    let stopped = false;
+    const timeout = wallDeadline(Date.now() + state.config.budget.perAttempt.timeoutSeconds * 1000, Error('Attempt timeout'));
+    const onTimeout = () => controller.abort(timeout.signal.reason);
+    timeout.signal.addEventListener('abort', onTimeout, { once: true });
+    if (timeout.signal.aborted) onTimeout();
+    const signal = combineSignals([this.signal, timeout.signal, controller.signal]);
+    let stopped = false; let dispatched = false;
     try {
-      const result = await this.backend.execute({ config: state.config, backendIdentity: state.manifest.backend, work, base, prompt, signal: controller.signal, reportUsage: this.usageObserver(() => work, updated => { work = updated; }, controller), record: (kind, data, identity) => {
+      checkCancellation(signal);
+      dispatched = true;
+      const result = await this.backend.execute({ config: state.config, backendIdentity: state.manifest.backend, work, base, prompt, signal, reportUsage: this.usageObserver(() => work, updated => { work = updated; }, controller), record: (kind, data, identity) => {
         const artifact = this.store.putJSON(data);
         if (identity) work = { ...work, ...identity };
         if (kind === 'muse.untracked_work') work = { ...work, untrackedWork: true };
@@ -231,6 +238,13 @@ export class Scheduler {
       if (actual.tokens === null) this.store.append({ type: 'run.status', status: 'needs_attention', message: `Missing usage for ${work.id}; its token reservation remains a liability` });
       return revision;
     } catch (error) {
+      if (!dispatched) {
+        // Preparation/recording can outlast a deadline without any model call.
+        // Release only work proven never dispatched; admitted work stays liable.
+        work = { ...work, state: 'released', evaluationReservations: {}, receipt: this.store.putJSON({ dispatched: false, error: String(error) }) };
+        this.store.append({ type: 'work.updated', work });
+        return;
+      }
       if (stopped && work.actual) {
         // Output capture can fail after a proven stop. Keep its paid usage and
         // reject the output without manufacturing uncertain execution.
@@ -243,7 +257,7 @@ export class Scheduler {
       work = { ...work, state: 'unknown', outcome: 'unknown', receipt: this.store.putJSON({ error: String(error) }) };
       this.store.append({ type: 'work.updated', work }, { type: 'run.status', status: 'needs_attention', message: `Attempt interrupted: ${String(error)}` });
       return;
-    } finally { clearTimeout(timeout); this.signal.removeEventListener('abort', onAbort); }
+    } finally { timeout.dispose(); this.signal.removeEventListener('abort', onAbort); }
   }
 
   async evaluate(revision: Revision, evaluator: FrozenEvaluator, phase: Phase): Promise<Evaluation | undefined> {
@@ -255,7 +269,7 @@ export class Scheduler {
   private async evaluateOwned(revision: Revision, evaluator: FrozenEvaluator, phase: Phase): Promise<Evaluation | undefined> {
     if (this.store.state.status === 'needs_attention' || this.store.state.backendInput) throw new InteractionRequired('Dispatch stopped for unresolved work or input');
     const spec = evaluator.spec;
-    this.signal.throwIfAborted();
+    checkCancellation(this.signal);
     if ((phase === 'held_out') !== (spec.split === 'held_out') || phase === 'report') throw Error('Evaluator phase must match its data split');
     if (spec.split === 'development' && this.store.state.finalists) throw Error('Development evaluation is closed after final selection');
     if (spec.split === 'held_out' && ![this.store.state.baselineId, ...(this.store.state.finalists ?? [])].includes(revision.id)) throw Error('Held-out evaluation requires a frozen finalist or baseline');
@@ -295,7 +309,7 @@ export class Scheduler {
     let frozen: { definition: { seed: number; workflow?: RepositoryWorkflow }; npm?: ReturnType<typeof npmTool> };
     const buildDirectory = join(scratch, 'project');
     try {
-      this.signal.throwIfAborted();
+      checkCancellation(this.signal);
       materialize(this.store, revision.snapshot, work.workspace);
       materialize(this.store, evaluator.bundle, evaluatorDir); mkdirSync(scratch);
       frozen = this.store.getJSON(evaluator.definitionDigest);
@@ -399,7 +413,7 @@ export class Scheduler {
     // Reconciliation may inspect one unknown operation without pardoning any
     // other unknown work. Answering also requires every other liability settled.
     const admission = { ...state, works: Object.fromEntries(Object.entries(state.works).map(([key, value]) => [key, key === workId ? { ...value, state: 'released' as const } : value])) };
-    this.signal.throwIfAborted();
+    checkCancellation(this.signal);
     // Inspection cannot dispatch model work and remains available for cleanup
     // after a deadline or exhausted budget. Its bounded elapsed time is charged.
     if (kind === 'answer') { this.verifyEnvironment(); admit(admission, cost, 'search'); }
@@ -409,11 +423,14 @@ export class Scheduler {
     const controller = new AbortController();
     const abort = () => controller.abort(this.signal.reason);
     this.signal.addEventListener('abort', abort, { once: true }); if (this.signal.aborted) abort();
-    const timer = setTimeout(() => controller.abort(Error('Backend recovery timeout')), state.config.budget.perAttempt.timeoutSeconds * 1000);
     const began = Date.now();
+    const timer = wallDeadline(Math.min(began + state.config.budget.perAttempt.timeoutSeconds * 1000,
+      kind === 'answer' ? Date.parse(state.deadline) : Infinity), Error('Backend recovery timeout'));
+    const signal = combineSignals([this.signal, timer.signal, controller.signal]);
     let stopped = false;
     try {
-      const request = { config: state.config, backendIdentity: state.manifest.backend, work, base, prompt: '', signal: controller.signal, ...(kind === 'answer' ? { reportUsage: this.usageObserver(() => work!, updated => { work = updated; }, controller) } : {}), record: (event: string, data: unknown, identity?: Partial<Pick<Work, 'sessionId' | 'commandId' | 'turnId'>>) => {
+      checkCancellation(signal);
+      const request = { config: state.config, backendIdentity: state.manifest.backend, work, base, prompt: '', signal, ...(kind === 'answer' ? { reportUsage: this.usageObserver(() => work!, updated => { work = updated; }, controller) } : {}), record: (event: string, data: unknown, identity?: Partial<Pick<Work, 'sessionId' | 'commandId' | 'turnId'>>) => {
         if (identity?.sessionId && identity.sessionId !== work!.sessionId) throw Error('Recovery changed the original session identity');
         if (identity?.commandId && identity.commandId !== work!.commandId) throw Error('Recovery changed the original turn command identity');
         if (identity?.turnId && work!.turnId && identity.turnId !== work!.turnId) throw Error('Recovery changed the original turn identity');
@@ -456,7 +473,7 @@ export class Scheduler {
       }
       work = { ...work, state: 'unknown', outcome: 'unknown', operation: { ...work.operation!, state: 'unknown' }, actual: actualUsage(work, work.actual?.tokens ?? null, previousSeconds + (Date.now() - began) / 1000), receipt: this.store.putJSON({ error: String(error) }) };
       this.store.append({ type: 'work.updated', work }, { type: 'run.status', status: 'needs_attention', message: String(error) });
-    } finally { clearTimeout(timer); this.signal.removeEventListener('abort', abort); }
+    } finally { timer.dispose(); this.signal.removeEventListener('abort', abort); }
   }
 
   recover(): void {

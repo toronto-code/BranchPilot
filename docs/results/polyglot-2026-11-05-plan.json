@@ -1,0 +1,782 @@
+{
+  "source": "https://github.com/Aider-AI/polyglot-benchmark",
+  "revision": "7e0611e77b54e2dea774cdc0aa00cf9f7ed6144f",
+  "seed": "branchpilot-polyglot-js-2026-11-05-v1",
+  "pool": [
+    "affine-cipher",
+    "alphametics",
+    "beer-song",
+    "binary",
+    "book-store",
+    "bottle-song",
+    "bowling",
+    "complex-numbers",
+    "connect",
+    "food-chain",
+    "forth",
+    "go-counting",
+    "grade-school",
+    "grep",
+    "house",
+    "killer-sudoku-helper",
+    "ledger",
+    "list-ops",
+    "meetup",
+    "ocr-numbers",
+    "palindrome-products",
+    "parallel-letter-frequency",
+    "phone-number",
+    "pig-latin",
+    "poker",
+    "promises",
+    "queen-attack",
+    "rational-numbers",
+    "react",
+    "rectangles",
+    "resistor-color-trio",
+    "rest-api",
+    "robot-name",
+    "say",
+    "scale-generator",
+    "simple-linked-list",
+    "space-age",
+    "state-of-tic-tac-toe",
+    "sum-of-multiples",
+    "tournament",
+    "transpose",
+    "triangle",
+    "twelve-days",
+    "two-bucket",
+    "variable-length-quantity",
+    "word-search",
+    "wordy",
+    "zebra-puzzle",
+    "zipper"
+  ],
+  "selected": [
+    "say",
+    "book-store",
+    "pig-latin",
+    "scale-generator",
+    "zebra-puzzle",
+    "robot-name",
+    "killer-sudoku-helper",
+    "forth",
+    "twelve-days",
+    "phone-number",
+    "state-of-tic-tac-toe",
+    "poker"
+  ],
+  "runtimeDigest": "bca35328065da7b4c9622bf5f2ead986f76c6456f9534c91d37f7ecaef3d5d7b",
+  "testTransformation": "Only xtest( becomes test(, matching upstream npm-test.sh; existing test.skip remains skipped.",
+  "split": "Development gets the first 60% of unique full test names ordered by SHA-256(seed:task:name); final grading runs the entire official suite.",
+  "preparationDigest": "45af57a1eebd6ee32909a3fe691e706c3d4199d6c17358247b520d5f199e99af",
+  "limits": {
+    "armSeconds": 3600,
+    "taskSeconds": 240,
+    "taskTokens": 360000,
+    "searchAttempts": 3,
+    "campaignUsd": 40
+  },
+  "model": "meta/muse-wonder-1.0",
+  "effort": "max",
+  "armOrder": [
+    "default",
+    "new"
+  ],
+  "publicSubset": true,
+  "officialLeaderboardProtocol": false,
+  "cases": [
+    {
+      "id": "say",
+      "tests": 16,
+      "developmentTests": 10,
+      "hiddenOnlyTests": 6,
+      "skipped": [],
+      "preflight": {
+        "referenceFull": "pass",
+        "referenceDevelopment": "pass",
+        "starterFull": "fail",
+        "starterDevelopment": "fail",
+        "referenceSeconds": 0.6882757910000002
+      },
+      "sourceDigests": {
+        "say.js": "c1f09750ce25e14250134ac4bc3ab574f3d306f6271d0141f8bab03226f791a7",
+        "say.spec.js": "86a02c3dd608617c70d189cc44c4efd1336ad16786d6c7d26457e4a04b90a876",
+        ".meta/config.json": "51800e390115739118fa46ad9907cc24654b824fa0cb2d9ab9fcc60eaee361ad",
+        ".meta/proof.ci.js": "c8cd635843f3ed752ef0ce64e38239536bc2a97f1bb1dad13fc0cb289329f397"
+      },
+      "assetDigests": {
+        "case.json": "43c0619ef52838662b52b884f08cbc56e03a33798b68f02bf497afadd87e7e1b",
+        "development.json": "02863b8d678efc853e45a219ad108bacbbe78e217a49bb3c5cab6a7b8f43a9e1",
+        "development.mjs": "c82d00153986e6122384fbd3f23eab9e6c550dbcbab93090baed5457cdaabaa6",
+        "grader.mjs": "548c5b0f2d1d17a8ce3a779ab4b320ebf3b2d03440fc80014d8b247856fcb311",
+        "held_out.json": "4aa98f4a19ef3bbb318ac58314af64e87fc9148a62acc6725f11db6e59183e1e",
+        "held_out.mjs": "a3c8077aa7b47e0f11c9b8a7d603b2e6975342142288815dc10bb120b7e2dd1a",
+        "runtime.tgz": "bca35328065da7b4c9622bf5f2ead986f76c6456f9534c91d37f7ecaef3d5d7b",
+        "tests/say.spec.js": "8de55476a0707ad99c709efcd9929535a3b367709580c08d73cc067e630bbdc6"
+      }
+    },
+    {
+      "id": "book-store",
+      "tests": 17,
+      "developmentTests": 11,
+      "hiddenOnlyTests": 6,
+      "skipped": [],
+      "preflight": {
+        "referenceFull": "pass",
+        "referenceDevelopment": "pass",
+        "starterFull": "fail",
+        "starterDevelopment": "fail",
+        "referenceSeconds": 0.5291267080000016
+      },
+      "sourceDigests": {
+        "book-store.js": "dddec1d9d2a60c4c7e32f4f7b9f9245078907d46e3d24a7dbc1011e2738d882f",
+        "book-store.spec.js": "b5173e06b26eac34667c4ed456e0d3a1a70d929ee6da2d1ab661baa31f9f9320",
+        ".meta/config.json": "b4670d1fa5c192c4006d7093e9ee56d8e0b07855faa29d269f3335d0a623b037",
+        ".meta/proof.ci.js": "86fa356b22031075f7eb00355ea9c239702e7cb83a4939cef8a5fb4d3974db1c"
+      },
+      "assetDigests": {
+        "case.json": "7f32703e888d502baaba7489a9aeeaa7f4a40e6bbfdfeab30b7894e08dcb9e70",
+        "development.json": "aa978631d8eec7fd7c9a05baf4af1aaec6845ddcd08094abd850096b12e8d7bb",
+        "development.mjs": "c82d00153986e6122384fbd3f23eab9e6c550dbcbab93090baed5457cdaabaa6",
+        "grader.mjs": "548c5b0f2d1d17a8ce3a779ab4b320ebf3b2d03440fc80014d8b247856fcb311",
+        "held_out.json": "b15267a3a464949cd31ccd0057b6139c8f53e7e511850e489ff30f271b76b286",
+        "held_out.mjs": "a3c8077aa7b47e0f11c9b8a7d603b2e6975342142288815dc10bb120b7e2dd1a",
+        "runtime.tgz": "bca35328065da7b4c9622bf5f2ead986f76c6456f9534c91d37f7ecaef3d5d7b",
+        "tests/book-store.spec.js": "9d00e95fe8e50963aa8165441ad0f237e54d00a09c4306800a6c23b4ff646415"
+      }
+    },
+    {
+      "id": "pig-latin",
+      "tests": 22,
+      "developmentTests": 14,
+      "hiddenOnlyTests": 8,
+      "skipped": [],
+      "preflight": {
+        "referenceFull": "pass",
+        "referenceDevelopment": "pass",
+        "starterFull": "fail",
+        "starterDevelopment": "fail",
+        "referenceSeconds": 0.5210285000000003
+      },
+      "sourceDigests": {
+        "pig-latin.js": "658bff3f1d3fb0d241ac5dc24260c3515eb1b067c1e7fde8bef0f0583d9053ed",
+        "pig-latin.spec.js": "a8706bf05efaf78e33f118ce17f3d5a915468a63d0f2f307577a83850e946529",
+        ".meta/config.json": "e9223c85a753b4447491e7d6659038ce98209f5f2f61c682feb98760a2b4eeb9",
+        ".meta/proof.ci.js": "8f37562080d2b2e86365cbbe42b3a2cbc7a12d51e3633d2d49146b43d8d424ba"
+      },
+      "assetDigests": {
+        "case.json": "b038c98306f62120a60a1372ce8d1d6b5cc11611dc96d4d9965ee97af26312e0",
+        "development.json": "c32bb6b586070a92982e049326dbb894cc382bff9e86e7896a55f2fa4f685702",
+        "development.mjs": "c82d00153986e6122384fbd3f23eab9e6c550dbcbab93090baed5457cdaabaa6",
+        "grader.mjs": "548c5b0f2d1d17a8ce3a779ab4b320ebf3b2d03440fc80014d8b247856fcb311",
+        "held_out.json": "c31d558316eb36738ed9fecbf95fa0ea36a7dd3ea9c40054d276c326bcca3ae2",
+        "held_out.mjs": "a3c8077aa7b47e0f11c9b8a7d603b2e6975342142288815dc10bb120b7e2dd1a",
+        "runtime.tgz": "bca35328065da7b4c9622bf5f2ead986f76c6456f9534c91d37f7ecaef3d5d7b",
+        "tests/pig-latin.spec.js": "f1256ddc051f9ea4bfb414e5b88b54f2c32c9fb895a5513233d06388c78dd926"
+      }
+    },
+    {
+      "id": "scale-generator",
+      "tests": 19,
+      "developmentTests": 12,
+      "hiddenOnlyTests": 7,
+      "skipped": [],
+      "preflight": {
+        "referenceFull": "pass",
+        "referenceDevelopment": "pass",
+        "starterFull": "fail",
+        "starterDevelopment": "fail",
+        "referenceSeconds": 0.6076815830000014
+      },
+      "sourceDigests": {
+        "scale-generator.js": "5bd16c20b323c82ea857f4274f6ff8fd74ba4d80d3c26cbac376cb84070afc22",
+        "scale-generator.spec.js": "afbbd1e04d6c632ccfb88c3120cea3801ab73100819f8f32c96d63f652665ee4",
+        ".meta/config.json": "3fccbc359d259f825f966c4188a50a5b7d3f395904d9d13ec1bba9e773c45964",
+        ".meta/proof.ci.js": "774e780949e2219aaff0eee441a29b96a89231a66f4687855df26ebf421cfea6"
+      },
+      "assetDigests": {
+        "case.json": "1e5a406236dd81df017df5c6545528eb7e9f8d1432867ed0c9fbb7f3f95e025b",
+        "development.json": "075c94dfa698dac6edee9d7ee9aa36ef8edd255fb0c84a182c9752c8321b1663",
+        "development.mjs": "c82d00153986e6122384fbd3f23eab9e6c550dbcbab93090baed5457cdaabaa6",
+        "grader.mjs": "548c5b0f2d1d17a8ce3a779ab4b320ebf3b2d03440fc80014d8b247856fcb311",
+        "held_out.json": "6f63d539d7cbb56aceddc83ccf64d1e63953172f4b6235ec1528320e5b7e1648",
+        "held_out.mjs": "a3c8077aa7b47e0f11c9b8a7d603b2e6975342142288815dc10bb120b7e2dd1a",
+        "runtime.tgz": "bca35328065da7b4c9622bf5f2ead986f76c6456f9534c91d37f7ecaef3d5d7b",
+        "tests/scale-generator.spec.js": "582e5f6180b454c7544b705e65457a8df17c2fb599079181c6c96d322565ce8b"
+      }
+    },
+    {
+      "id": "zebra-puzzle",
+      "tests": 2,
+      "developmentTests": 1,
+      "hiddenOnlyTests": 1,
+      "skipped": [],
+      "preflight": {
+        "referenceFull": "pass",
+        "referenceDevelopment": "pass",
+        "starterFull": "fail",
+        "starterDevelopment": "fail",
+        "referenceSeconds": 0.6233372079999971
+      },
+      "sourceDigests": {
+        "zebra-puzzle.js": "1f6692b1a9948017f71802647314c3dfc60f0b5a48bc0e0322850dc09bdbab33",
+        "zebra-puzzle.spec.js": "f5bf4b2f41dc294ee7dd00da0262769073c54aef8b62da98fb2b9180cbee782a",
+        ".meta/config.json": "7ed70579168d920d2e0b098929d2a7a90a8a4c44846a22354ddcf8ed4d0282a2",
+        ".meta/proof.ci.js": "d2449c97aedd6806811766c4b43929798428525bf13221697b006ede5bbaee05"
+      },
+      "assetDigests": {
+        "case.json": "e35c846c462a513a0abb2d7c2a404488c6a55352b4a5100bbc01ca2d88423483",
+        "development.json": "77ed321eb7bf18e5eadab8c0729d68b3e558423f92805085950fce6d279a9e62",
+        "development.mjs": "c82d00153986e6122384fbd3f23eab9e6c550dbcbab93090baed5457cdaabaa6",
+        "grader.mjs": "548c5b0f2d1d17a8ce3a779ab4b320ebf3b2d03440fc80014d8b247856fcb311",
+        "held_out.json": "6aa65b0c49531b79610cec2045b3ed0effda1e99a397ec514536135e454bf745",
+        "held_out.mjs": "a3c8077aa7b47e0f11c9b8a7d603b2e6975342142288815dc10bb120b7e2dd1a",
+        "runtime.tgz": "bca35328065da7b4c9622bf5f2ead986f76c6456f9534c91d37f7ecaef3d5d7b",
+        "tests/zebra-puzzle.spec.js": "adb3c2942f1e880b7c501a4468d01630e7b8a192c1d3d0771d9f1994b76c7465"
+      }
+    },
+    {
+      "id": "robot-name",
+      "tests": 8,
+      "developmentTests": 5,
+      "hiddenOnlyTests": 3,
+      "skipped": [
+        "Robot all the names can be generated"
+      ],
+      "preflight": {
+        "referenceFull": "pass",
+        "referenceDevelopment": "pass",
+        "starterFull": "fail",
+        "starterDevelopment": "fail",
+        "referenceSeconds": 0.8726139999999941
+      },
+      "sourceDigests": {
+        "robot-name.js": "e78b443880e08b82c24a79dc09177fca3887b3b6a4cd03f189b47bc045649bf4",
+        "robot-name.spec.js": "587e1a0760882446af116b170223105a48b05c42af7c1a062bc8570601fbcc14",
+        ".meta/config.json": "6e4488f180ca348676d8fd035bbecaa3ab8996ce0286182ca8facb6912ead321",
+        ".meta/proof.ci.js": "38ccc19400800d6ba706dbb641f2c50766cb47147d8a4ccecc6db7a058dcfc5d"
+      },
+      "assetDigests": {
+        "case.json": "f73eb37a08f660eb79b1bb352f7ce71604ef75f11570f2395d2635755c9d4dc8",
+        "development.json": "fce666fef8d273e5dda251f8cc8ae8a09b84d2747c65fbe5780b58892a9cffbb",
+        "development.mjs": "c82d00153986e6122384fbd3f23eab9e6c550dbcbab93090baed5457cdaabaa6",
+        "grader.mjs": "548c5b0f2d1d17a8ce3a779ab4b320ebf3b2d03440fc80014d8b247856fcb311",
+        "held_out.json": "7ccf144fff2d5e891f35c1e8f75f808b8f0bfd38786eb7a188ac39bee78190bd",
+        "held_out.mjs": "a3c8077aa7b47e0f11c9b8a7d603b2e6975342142288815dc10bb120b7e2dd1a",
+        "runtime.tgz": "bca35328065da7b4c9622bf5f2ead986f76c6456f9534c91d37f7ecaef3d5d7b",
+        "tests/robot-name.spec.js": "c238df5515e027317125871235b7db2604cdf90446132b33ea29026054b2b06b"
+      }
+    },
+    {
+      "id": "killer-sudoku-helper",
+      "tests": 13,
+      "developmentTests": 8,
+      "hiddenOnlyTests": 5,
+      "skipped": [],
+      "preflight": {
+        "referenceFull": "pass",
+        "referenceDevelopment": "pass",
+        "starterFull": "fail",
+        "starterDevelopment": "fail",
+        "referenceSeconds": 0.5867638750000042
+      },
+      "sourceDigests": {
+        "killer-sudoku-helper.js": "13155d0f15fe6507808c3341d159f7b8f182a19eded887c8dc451bbf41f90a49",
+        "killer-sudoku-helper.spec.js": "7ffb82e4bed5df52dff855635a6c3c2e217f82c70847e930fbf7e05eee813dc7",
+        ".meta/config.json": "8c8632784f1d74686b6ef9002ed7088064ce9dc064356f74fd976d042a490fd3",
+        ".meta/proof.ci.js": "b85374cf43cbd8de69df4114ef0013aa7ec88c8a573d7c2dc509420e835e4d63"
+      },
+      "assetDigests": {
+        "case.json": "74358c3bfddffdd60b365fd474cbecd810062ccc4c1ec022ac8eeaa53ff2afb3",
+        "development.json": "071e97ec4f3792bcde481595ea65adbfebae763f8650688c6eed82e9bf01c238",
+        "development.mjs": "c82d00153986e6122384fbd3f23eab9e6c550dbcbab93090baed5457cdaabaa6",
+        "grader.mjs": "548c5b0f2d1d17a8ce3a779ab4b320ebf3b2d03440fc80014d8b247856fcb311",
+        "held_out.json": "fc314529541de985d9b343357208eee0a81e16e23a108559874254d2f6689bb7",
+        "held_out.mjs": "a3c8077aa7b47e0f11c9b8a7d603b2e6975342142288815dc10bb120b7e2dd1a",
+        "runtime.tgz": "bca35328065da7b4c9622bf5f2ead986f76c6456f9534c91d37f7ecaef3d5d7b",
+        "tests/killer-sudoku-helper.spec.js": "ae10c2cee615def9802e0d9e1aafc7f9c681babe5b4175791544485f2900ea29"
+      }
+    },
+    {
+      "id": "forth",
+      "tests": 49,
+      "developmentTests": 30,
+      "hiddenOnlyTests": 19,
+      "skipped": [],
+      "preflight": {
+        "referenceFull": "pass",
+        "referenceDevelopment": "pass",
+        "starterFull": "fail",
+        "starterDevelopment": "fail",
+        "referenceSeconds": 0.5492050000000017
+      },
+      "sourceDigests": {
+        "forth.js": "10b22e0a92b020bef406ad5f13fb75b28350373269a0cec097a61e7ec2eb6cc4",
+        "forth.spec.js": "d54c1cf8c7e20d26bd173e451c0a04d9617ec2a9a7c14d16762942fd17e7ee6d",
+        ".meta/config.json": "7a1686a2f71d88fb8551b9bec43c9bdad7877d4c43850e6fbac4caaae75d13d9",
+        ".meta/proof.ci.js": "61fdac019920d16c90a7501259c58d46c4ac49f2c11f3f701bc1f595509ad9d0"
+      },
+      "assetDigests": {
+        "case.json": "23c2fb98be67bd1b89ccf329c7cb7b77dcebaa2b3f0977f7f15fef96d851b563",
+        "development.json": "2f61eed86bca2b7b5e9e98e1185fba1b9f058b0792f70cffcfe0fdbbf7eb8cdd",
+        "development.mjs": "c82d00153986e6122384fbd3f23eab9e6c550dbcbab93090baed5457cdaabaa6",
+        "grader.mjs": "548c5b0f2d1d17a8ce3a779ab4b320ebf3b2d03440fc80014d8b247856fcb311",
+        "held_out.json": "ae6884facfaeb8443f3a3b62718ce82f1ebabc63b0ab7afc73341344095719e2",
+        "held_out.mjs": "a3c8077aa7b47e0f11c9b8a7d603b2e6975342142288815dc10bb120b7e2dd1a",
+        "runtime.tgz": "bca35328065da7b4c9622bf5f2ead986f76c6456f9534c91d37f7ecaef3d5d7b",
+        "tests/forth.spec.js": "d55b74fef04cf37779541a536c55eb1717bc414790a9667fe3403805710bc21d"
+      }
+    },
+    {
+      "id": "twelve-days",
+      "tests": 15,
+      "developmentTests": 9,
+      "hiddenOnlyTests": 6,
+      "skipped": [],
+      "preflight": {
+        "referenceFull": "pass",
+        "referenceDevelopment": "pass",
+        "starterFull": "fail",
+        "starterDevelopment": "fail",
+        "referenceSeconds": 0.5726909169999999
+      },
+      "sourceDigests": {
+        "twelve-days.js": "dedaee57a1577810ca388ee4a9a797e299d6ddfea87049bc57974b30d7fa4887",
+        "twelve-days.spec.js": "60b8eb67579ac6ddbcb8eb5fb0631727ff84fb1b88299b19b4217eecd73fb71e",
+        ".meta/config.json": "c8b4619f71b4a675a71a21ab700dfe104a2582452b6f97719a4c4add8d999467",
+        ".meta/proof.ci.js": "6283d4572bad7db5a6e49062ef2619393a1c38e41902c98b0ee307126915df29"
+      },
+      "assetDigests": {
+        "case.json": "13483f9adcbc5d48007cddba01b025a4ff81cae890d7f11419e4bb97b47eaa18",
+        "development.json": "ce3d03059f6bd78ad1e37bac958357115d92a905be4562d6710f05a9401ac82d",
+        "development.mjs": "c82d00153986e6122384fbd3f23eab9e6c550dbcbab93090baed5457cdaabaa6",
+        "grader.mjs": "548c5b0f2d1d17a8ce3a779ab4b320ebf3b2d03440fc80014d8b247856fcb311",
+        "held_out.json": "8071313bbfd5802c0034b75c13788ccff69470b2d8f84b444d198c01e46b0915",
+        "held_out.mjs": "a3c8077aa7b47e0f11c9b8a7d603b2e6975342142288815dc10bb120b7e2dd1a",
+        "runtime.tgz": "bca35328065da7b4c9622bf5f2ead986f76c6456f9534c91d37f7ecaef3d5d7b",
+        "tests/twelve-days.spec.js": "570fad1e5f02b3c8ca35bbd2a0ca38bbd311df77ea2cca2aa721ee90a32d00cc"
+      }
+    },
+    {
+      "id": "phone-number",
+      "tests": 18,
+      "developmentTests": 11,
+      "hiddenOnlyTests": 7,
+      "skipped": [],
+      "preflight": {
+        "referenceFull": "pass",
+        "referenceDevelopment": "pass",
+        "starterFull": "fail",
+        "starterDevelopment": "fail",
+        "referenceSeconds": 0.567505290999994
+      },
+      "sourceDigests": {
+        "phone-number.js": "fd10fe10af5ca79a1e9e10485d59106befaad96a9140b690917f85930bd5129c",
+        "phone-number.spec.js": "0cc159c2ca45742107522b53b955fdb2a84af3b16633af9b5093acafbad53bc1",
+        ".meta/config.json": "9fefecfe19399fd9b5d6883e02b0858566d6bd2b24b454361274ecf78616569f",
+        ".meta/proof.ci.js": "b9ba077f1cc2481079a63b484df8a0df9944d5cf4fb3c49f99654a4eed4d9d00"
+      },
+      "assetDigests": {
+        "case.json": "e3ea515f6e68c73299cdedb78c0226057ce723603652a1403487795fc4c385c8",
+        "development.json": "80cfabe260cbef156e67d36b16ef0f9525224782e3147cc1fa93358561079c44",
+        "development.mjs": "c82d00153986e6122384fbd3f23eab9e6c550dbcbab93090baed5457cdaabaa6",
+        "grader.mjs": "548c5b0f2d1d17a8ce3a779ab4b320ebf3b2d03440fc80014d8b247856fcb311",
+        "held_out.json": "454601787f6aa55fe05abd7d393f8524b7b0208f7338a8afe8aebf73c3eb66c1",
+        "held_out.mjs": "a3c8077aa7b47e0f11c9b8a7d603b2e6975342142288815dc10bb120b7e2dd1a",
+        "runtime.tgz": "bca35328065da7b4c9622bf5f2ead986f76c6456f9534c91d37f7ecaef3d5d7b",
+        "tests/phone-number.spec.js": "015f08d3d297b12d8bacbaccc13c55288fb945a062e18b1f6963e5ae00467148"
+      }
+    },
+    {
+      "id": "state-of-tic-tac-toe",
+      "tests": 27,
+      "developmentTests": 17,
+      "hiddenOnlyTests": 10,
+      "skipped": [],
+      "preflight": {
+        "referenceFull": "pass",
+        "referenceDevelopment": "pass",
+        "starterFull": "fail",
+        "starterDevelopment": "fail",
+        "referenceSeconds": 0.5808837919999933
+      },
+      "sourceDigests": {
+        "state-of-tic-tac-toe.js": "03f47c68006682b5e6a3460e4a2d22883f999b3dbeb74ba0fbb6731a3661fce8",
+        "state-of-tic-tac-toe.spec.js": "dcaeb5359338d057f53c6c19dd583c443d05d38257c209a7af721e7156bb4221",
+        ".meta/config.json": "7809e9869a39ce81e3c35d6eaa25d62e3a376acebd4182b865d05923bc5b82e0",
+        ".meta/proof.ci.js": "c9a64829d9e7348ded9b81bb19a09760c45cc1db45f07e1ff6e1afd976445d86"
+      },
+      "assetDigests": {
+        "case.json": "e025ac16f84ac548b992f0e3b2e6e5c8dce6c99d4ab7662adf780e278a910b15",
+        "development.json": "73b06f4149507e72527910fa82668dc738e2ea04e1dab40fd9c73c7696680765",
+        "development.mjs": "c82d00153986e6122384fbd3f23eab9e6c550dbcbab93090baed5457cdaabaa6",
+        "grader.mjs": "548c5b0f2d1d17a8ce3a779ab4b320ebf3b2d03440fc80014d8b247856fcb311",
+        "held_out.json": "a4234e79ac91d6d2f9cffcfe5c236c3f7f9840f6b5fa890cb8625deee2a47607",
+        "held_out.mjs": "a3c8077aa7b47e0f11c9b8a7d603b2e6975342142288815dc10bb120b7e2dd1a",
+        "runtime.tgz": "bca35328065da7b4c9622bf5f2ead986f76c6456f9534c91d37f7ecaef3d5d7b",
+        "tests/state-of-tic-tac-toe.spec.js": "4caa38f95c2ab82e9732f12db278be86f1e74430f616d36e060d61c8d3020b28"
+      }
+    },
+    {
+      "id": "poker",
+      "tests": 28,
+      "developmentTests": 17,
+      "hiddenOnlyTests": 11,
+      "skipped": [],
+      "preflight": {
+        "referenceFull": "pass",
+        "referenceDevelopment": "pass",
+        "starterFull": "fail",
+        "starterDevelopment": "fail",
+        "referenceSeconds": 0.6709002500000061
+      },
+      "sourceDigests": {
+        "poker.js": "9a66ec596a0ad14974edfa8c87c8c7b14c513c412594f7852312117228a1921b",
+        "poker.spec.js": "934872e1b83636897d43ba1074d3cac90e98d6948edaa914bcc84d03f8f3eb27",
+        ".meta/config.json": "cf2eb6709ee6fcbc56f741389eb1b94299a8eb3d313e625890a40efdea55571e",
+        ".meta/proof.ci.js": "f07c61e93deb98baba9ae5876f37ce687c78a1bb8a6344a5761cc8ece7c9864e"
+      },
+      "assetDigests": {
+        "case.json": "7d7ba7a18f4d845410f8ee36e4bf31cba5a6279b1e11f0d8f89aee0517f00f33",
+        "development.json": "bbaa1b16b883907dbfbfcaebb263617f5224fd0fa9a5d29d092de4b678bd1436",
+        "development.mjs": "c82d00153986e6122384fbd3f23eab9e6c550dbcbab93090baed5457cdaabaa6",
+        "grader.mjs": "548c5b0f2d1d17a8ce3a779ab4b320ebf3b2d03440fc80014d8b247856fcb311",
+        "held_out.json": "b88267365c4245ad893fd331489ef574d2a793322066c940f294f2939cfa3aff",
+        "held_out.mjs": "a3c8077aa7b47e0f11c9b8a7d603b2e6975342142288815dc10bb120b7e2dd1a",
+        "runtime.tgz": "bca35328065da7b4c9622bf5f2ead986f76c6456f9534c91d37f7ecaef3d5d7b",
+        "tests/poker.spec.js": "783b68b46c118125274ad2087bc121716a99de14c22255eab751d19acd827498"
+      }
+    }
+  ],
+  "sandboxPreflight": {
+    "passed": true,
+    "checks": [
+      {
+        "task": "say",
+        "kind": "reference",
+        "split": "development",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 5.244
+      },
+      {
+        "task": "say",
+        "kind": "reference",
+        "split": "held_out",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 4.918
+      },
+      {
+        "task": "say",
+        "kind": "input",
+        "split": "held_out",
+        "expected": "fail",
+        "observed": "fail",
+        "passed": true,
+        "seconds": 4.904
+      },
+      {
+        "task": "book-store",
+        "kind": "reference",
+        "split": "development",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 5.779
+      },
+      {
+        "task": "book-store",
+        "kind": "reference",
+        "split": "held_out",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 6.548
+      },
+      {
+        "task": "book-store",
+        "kind": "input",
+        "split": "held_out",
+        "expected": "fail",
+        "observed": "fail",
+        "passed": true,
+        "seconds": 5.216
+      },
+      {
+        "task": "pig-latin",
+        "kind": "reference",
+        "split": "development",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 5.131
+      },
+      {
+        "task": "pig-latin",
+        "kind": "reference",
+        "split": "held_out",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 5.11
+      },
+      {
+        "task": "pig-latin",
+        "kind": "input",
+        "split": "held_out",
+        "expected": "fail",
+        "observed": "fail",
+        "passed": true,
+        "seconds": 5.322
+      },
+      {
+        "task": "scale-generator",
+        "kind": "reference",
+        "split": "development",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 5.752
+      },
+      {
+        "task": "scale-generator",
+        "kind": "reference",
+        "split": "held_out",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 6.131
+      },
+      {
+        "task": "scale-generator",
+        "kind": "input",
+        "split": "held_out",
+        "expected": "fail",
+        "observed": "fail",
+        "passed": true,
+        "seconds": 6.776
+      },
+      {
+        "task": "zebra-puzzle",
+        "kind": "reference",
+        "split": "development",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 5.886
+      },
+      {
+        "task": "zebra-puzzle",
+        "kind": "reference",
+        "split": "held_out",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 5.805
+      },
+      {
+        "task": "zebra-puzzle",
+        "kind": "input",
+        "split": "held_out",
+        "expected": "fail",
+        "observed": "fail",
+        "passed": true,
+        "seconds": 5.188
+      },
+      {
+        "task": "robot-name",
+        "kind": "reference",
+        "split": "development",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 5.725
+      },
+      {
+        "task": "robot-name",
+        "kind": "reference",
+        "split": "held_out",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 5.962
+      },
+      {
+        "task": "robot-name",
+        "kind": "input",
+        "split": "held_out",
+        "expected": "fail",
+        "observed": "fail",
+        "passed": true,
+        "seconds": 5.211
+      },
+      {
+        "task": "killer-sudoku-helper",
+        "kind": "reference",
+        "split": "development",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 5.326
+      },
+      {
+        "task": "killer-sudoku-helper",
+        "kind": "reference",
+        "split": "held_out",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 5.085
+      },
+      {
+        "task": "killer-sudoku-helper",
+        "kind": "input",
+        "split": "held_out",
+        "expected": "fail",
+        "observed": "fail",
+        "passed": true,
+        "seconds": 6.039
+      },
+      {
+        "task": "forth",
+        "kind": "reference",
+        "split": "development",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 5.762
+      },
+      {
+        "task": "forth",
+        "kind": "reference",
+        "split": "held_out",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 7.095
+      },
+      {
+        "task": "forth",
+        "kind": "input",
+        "split": "held_out",
+        "expected": "fail",
+        "observed": "fail",
+        "passed": true,
+        "seconds": 5.62
+      },
+      {
+        "task": "twelve-days",
+        "kind": "reference",
+        "split": "development",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 5.217
+      },
+      {
+        "task": "twelve-days",
+        "kind": "reference",
+        "split": "held_out",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 5.244
+      },
+      {
+        "task": "twelve-days",
+        "kind": "input",
+        "split": "held_out",
+        "expected": "fail",
+        "observed": "fail",
+        "passed": true,
+        "seconds": 5.158
+      },
+      {
+        "task": "phone-number",
+        "kind": "reference",
+        "split": "development",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 5.402
+      },
+      {
+        "task": "phone-number",
+        "kind": "reference",
+        "split": "held_out",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 5.345
+      },
+      {
+        "task": "phone-number",
+        "kind": "input",
+        "split": "held_out",
+        "expected": "fail",
+        "observed": "fail",
+        "passed": true,
+        "seconds": 5.054
+      },
+      {
+        "task": "state-of-tic-tac-toe",
+        "kind": "reference",
+        "split": "development",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 5.099
+      },
+      {
+        "task": "state-of-tic-tac-toe",
+        "kind": "reference",
+        "split": "held_out",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 5.003
+      },
+      {
+        "task": "state-of-tic-tac-toe",
+        "kind": "input",
+        "split": "held_out",
+        "expected": "fail",
+        "observed": "fail",
+        "passed": true,
+        "seconds": 5.097
+      },
+      {
+        "task": "poker",
+        "kind": "reference",
+        "split": "development",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 6.023
+      },
+      {
+        "task": "poker",
+        "kind": "reference",
+        "split": "held_out",
+        "expected": "pass",
+        "observed": "pass",
+        "passed": true,
+        "seconds": 5.348
+      },
+      {
+        "task": "poker",
+        "kind": "input",
+        "split": "held_out",
+        "expected": "fail",
+        "observed": "fail",
+        "passed": true,
+        "seconds": 5.074
+      }
+    ]
+  }
+}

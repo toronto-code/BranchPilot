@@ -31,7 +31,7 @@ export interface Work {
   observedTokens?: number;
   untrackedWork?: true;
   agentSettings?: import('./muse-models.js').ConfirmedAgentSettings;
-  usageSource?: 'fixture' | 'host_reported' | 'runner_measured' | 'missing';
+  usageSource?: 'fixture' | 'host_reported' | 'provider_reported' | 'runner_measured' | 'missing';
   receipt?: Digest; sessionId?: string; commandId?: string; turnId?: string;
   outputRevisionId?: string; preparedAt?: string; resourceGroup?: string;
   evaluationReservations?: Record<string, Resources>;

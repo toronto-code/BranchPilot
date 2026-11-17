@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { atomicWrite } from './store.js';
 import { checkCancellation, wallDeadline } from './time.js';
 import { assertMuseCadAdmission, campaignHistoryDigest, retainedHistoricalUnknown, type MuseCadBudget } from './campaign-budget.js';
+import { fetchMuseCatalog, recoverMuseResponse } from './muse-response-recovery.js';
 
 // This deliberately supports only the observed Wonder text Responses endpoint.
 // Prices are conservative: all input is charged at the uncached rate. No credit
@@ -18,7 +19,7 @@ const entrySchema = z.object({ id: z.number().int().positive(), state: z.enum(['
   reservedUsd: z.literal(RESERVATION_USD), chargedUsd: z.number().finite().nonnegative().max(RESERVATION_USD).optional(),
   inputTokens: z.number().int().nonnegative().optional(), outputTokens: z.number().int().nonnegative().optional(),
   reservedAt: z.string().datetime().optional(), providerResponseId: z.string().min(1).max(256).optional(),
-  providerRequestId: z.string().min(1).max(256).optional() }).strict();
+  providerRequestId: z.string().min(1).max(256).optional(), settlementSource: z.enum(['stream', 'retrieval']).optional() }).strict();
 const ledgerSchema = z.discriminatedUnion('schemaVersion', [
   z.object({ schemaVersion: z.literal(1), model: z.literal(MODEL), limitUsd: z.number().finite().positive().max(40), entries: z.array(entrySchema) }).strict(),
   z.object({ schemaVersion: z.literal(2), model: z.literal(MODEL), limitUsd: z.number().finite().positive().max(80), entries: z.array(entrySchema),
@@ -79,13 +80,13 @@ export class MuseSpendLedger {
     // Keep identifiers even if the process dies before terminal usage/EOF.
     if (changed) this.save();
   }
-  settle(id: number, usage: unknown): void {
+  settle(id: number, usage: unknown, source: 'stream' | 'retrieval' = 'stream'): void {
     const entry = this.ledger.entries.find(e => e.id === id);
     if (!entry || entry.state !== 'reserved') throw Error('Request is not awaiting settlement');
     const parsed = z.object({ input_tokens: z.number().int().nonnegative().max(INPUT_LIMIT), output_tokens: z.number().int().nonnegative().max(OUTPUT_LIMIT) }).safeParse(usage);
     if (!parsed.success || parsed.data.input_tokens + parsed.data.output_tokens === 0) { this.unknown(id); return; }
     const { input_tokens: input, output_tokens: output } = parsed.data;
-    Object.assign(entry, { state: 'settled', chargedUsd: Math.ceil((input * 4 + output * 20)) / 1_000_000, inputTokens: input, outputTokens: output });
+    Object.assign(entry, { state: 'settled', chargedUsd: Math.ceil((input * 4 + output * 20)) / 1_000_000, inputTokens: input, outputTokens: output, settlementSource: source });
     this.save();
   }
   unknown(id: number) {
@@ -135,11 +136,11 @@ export function verifyMusePricing(data: unknown): boolean {
  * The host receives a random local token; every paid retry/child request must
  * independently pass admission. Unknown outcomes block the whole campaign.
  */
-export async function startMuseGateway(options: { key: string; ledgerFile: string; limitUsd?: number; cadBudget?: MuseCadBudget; fetcher?: typeof fetch; signal?: AbortSignal; onUnknown?: (id: number) => void }) {
+export async function startMuseGateway(options: { key: string; ledgerFile: string; limitUsd?: number; cadBudget?: MuseCadBudget; recoverResponses?: boolean; fetcher?: typeof fetch; signal?: AbortSignal; onUnknown?: (id: number) => void }) {
   const ledger = new MuseSpendLedger(options.ledgerFile, options.limitUsd, options.cadBudget);
   const token = `LLM_0_${randomBytes(32).toString('hex')}`;
   const inflight = new Set<Promise<void>>();
-  const events: { method?: string; path?: string; status?: number; error?: string; requestId?: number; startedAt: string; finishedAt?: string; upstreamAt?: string; terminal?: boolean }[] = [];
+  const events: { method?: string; path?: string; status?: number; error?: string; requestId?: number; startedAt: string; finishedAt?: string; upstreamAt?: string; terminal?: boolean; billingRecovered?: boolean }[] = [];
   let catalogVerified = false;
   let closing = false;
   let closePromise: Promise<void> | undefined;
@@ -159,6 +160,16 @@ export async function startMuseGateway(options: { key: string; ledgerFile: strin
         }
       };
       const observation: typeof events[number] = { method: req.method, path: req.url, startedAt: new Date().toISOString() }; events.push(observation);
+      const recoverBilling = async () => {
+        if (reservation === undefined || !options.recoverResponses || !deadline) return;
+        const entry = ledger.snapshot().entries[reservation - 1]!;
+        if (entry.state !== 'reserved' || !entry.providerResponseId) return;
+        const recovered = await recoverMuseResponse({ key: options.key, responseId: entry.providerResponseId, signal: deadline.signal, fetcher: options.fetcher ?? fetch });
+        if (recovered) {
+          ledger.settle(reservation, recovered.usage, 'retrieval');
+          observation.billingRecovered = ledger.snapshot().entries[reservation - 1]!.state === 'settled';
+        }
+      };
       try {
         if (closing) { res.writeHead(503).end(); return; }
         if (req.headers.authorization !== `Bearer ${token}`) { res.writeHead(401).end(); return; }
@@ -185,9 +196,10 @@ export async function startMuseGateway(options: { key: string; ledgerFile: strin
         // expires promptly after sleep; uncertainty never releases a reserve.
         deadline = wallDeadline(Date.now() + 180_000, Error('Gateway response wall timeout'));
         observation.upstreamAt = new Date().toISOString();
-        const response = await (options.fetcher ?? fetch)(`https://api.meta.ai${paid ? '/v1/responses' : '/muse-code/models'}`, { method: req.method,
+        const response = catalog ? await fetchMuseCatalog({ key: options.key, signal: deadline.signal, fetcher: options.fetcher ?? fetch, accept: req.headers.accept ?? 'application/json' })
+          : await (options.fetcher ?? fetch)('https://api.meta.ai/v1/responses', { method: req.method,
           headers: { authorization: `Bearer ${options.key}`, 'content-type': 'application/json', accept: req.headers.accept ?? 'application/json' },
-          ...(body ? { body: JSON.stringify(body) } : {}), redirect: 'error', signal: deadline.signal });
+          body: JSON.stringify({ ...body, ...(options.recoverResponses ? { store: true } : {}) }), redirect: 'error', signal: deadline.signal });
         observation.status = response.status;
         if (catalog) {
           const text = await response.text();
@@ -214,7 +226,7 @@ export async function startMuseGateway(options: { key: string; ledgerFile: strin
           const data = line.slice(5).trim(); if (!data || data === '[DONE]') return;
           const value = JSON.parse(data) as { type?: string; response?: { id?: unknown; usage?: unknown } };
           if (value.response?.id !== undefined) ledger.observeProviderIdentity(reservation!, { responseId: value.response.id });
-          if (['response.completed', 'response.incomplete'].includes(value.type ?? '') && !terminal) { usage = value.response?.usage; finish(); }
+          if (['response.completed', 'response.incomplete', 'response.failed', 'response.cancelled'].includes(value.type ?? '') && !terminal) { usage = value.response?.usage; finish(); }
         };
         const decoder = new TextDecoder(); const sse = response.headers.get('content-type')?.includes('text/event-stream');
         if (response.body) for await (const chunk of response.body) {
@@ -228,14 +240,16 @@ export async function startMuseGateway(options: { key: string; ledgerFile: strin
         else if (response.ok) {
           const data = JSON.parse(buffer) as { id?: unknown; usage?: unknown; status?: string };
           if (data.id !== undefined) ledger.observeProviderIdentity(reservation!, { responseId: data.id });
-          usage = data.usage; if (['completed', 'incomplete'].includes(data.status ?? '')) finish();
+          usage = data.usage; if (['completed', 'incomplete', 'failed', 'cancelled'].includes(data.status ?? '')) finish();
         }
         observation.terminal = terminal;
+        if (!terminal) await recoverBilling();
         if (!response.ok || !terminal) ledger.unknown(reservation!);
         unknown();
-        res.end();
+        if (observation.billingRecovered && !terminal) res.destroy(); else res.end();
       } catch (error) {
         observation.error = error instanceof z.ZodError ? `Unpriced request fields: ${error.issues.map(issue => `${issue.path.join('.')}:${issue.code}${issue.code === 'invalid_literal' && issue.path.at(-1) === 'type' ? `(${String(issue.received).slice(0, 64)})` : ''}`).join(', ')}` : String(error).replaceAll(options.key, '[redacted]');
+        await recoverBilling();
         if (reservation !== undefined) ledger.unknown(reservation);
         unknown();
         // A local policy refusal is permanent. 429 makes the host repeatedly
@@ -243,7 +257,7 @@ export async function startMuseGateway(options: { key: string; ledgerFile: strin
         if (!res.headersSent) {
           res.writeHead(403, { 'content-type': 'application/json' });
           res.end(JSON.stringify({ error: { message: 'BranchPilot spending guard refused or could not settle this request; inspect the local ledger.', type: 'budget_guard' } }));
-        } else if (reservation !== undefined && ledger.snapshot().entries[reservation - 1]?.state === 'settled') res.end();
+        } else if (observation.terminal && reservation !== undefined && ledger.snapshot().entries[reservation - 1]?.state === 'settled') res.end();
         else res.destroy(); // Do not append JSON to an already-started SSE body.
       } finally { deadline?.dispose(); observation.finishedAt = new Date().toISOString(); }
     })();
@@ -252,14 +266,15 @@ export async function startMuseGateway(options: { key: string; ledgerFile: strin
   try { await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); }); }
   catch (error) { ledger.close(); throw error; }
   const address = server.address(); if (!address || typeof address === 'string') throw Error('Gateway has no local address');
-  return { url: `http://127.0.0.1:${address.port}`, token, ledger, events, catalogReady: () => catalogVerified,
+  const drain = async () => { while (inflight.size) await Promise.allSettled([...inflight]); };
+  return { url: `http://127.0.0.1:${address.port}`, token, ledger, events, drain, catalogReady: () => catalogVerified,
     close: () => closePromise ??= (async () => {
       closing = true;
       const stopped = new Promise<void>(resolve => { server.close(() => resolve()); });
       // Drop local uploads/queued clients before waiting. Already admitted
       // upstream responses drain independently to preserve their billing proof.
       server.closeAllConnections();
-      while (inflight.size) await Promise.allSettled([...inflight]);
+      await drain();
       await stopped;
       ledger.close();
     })() };

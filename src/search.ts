@@ -45,7 +45,16 @@ export function autoSwitch(state: State): { strategy: Strategy; reason: string }
   if (state.config.policy.mode !== 'auto' || state.finalists) return;
   const tried = new Set(state.decisions.filter(d => d.action.startsWith('switch:')).map(d => d.action.slice(7)));
   const latest = state.revisions.filter(r => r.attemptId).at(-1);
-  if (!latest) return;
+  if (!latest) {
+    const attempt = Object.values(state.works).filter(w => w.kind === 'attempt' && w.state !== 'released').at(-1);
+    if (state.config.task.type === 'code' && state.strategy.name === 'direct' && attempt?.state === 'settled'
+      && attempt.outcome === 'cancelled' && attempt.actual?.tokens != null && !attempt.untrackedWork
+      && state.config.policy.allowedStrategies.includes('retry')) return {
+      strategy: { name: 'retry', maxAttemptsPerCandidate: 3 },
+      reason: 'A stopped budget checkpoint made no edit; use the remaining shared allowance rather than ending after one attempt',
+    };
+    return;
+  }
   const results = resultsFor(state, latest.id);
   if (results.some(e => e.failureType === 'infrastructure' || e.failureType === 'timeout')) return;
   if (state.config.task.type === 'code' && feasible(state.config, results)) return;

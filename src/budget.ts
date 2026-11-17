@@ -31,13 +31,29 @@ export function budgetView(state: State, final = false): BudgetView {
 export function finalizationSeconds(state: State): number {
   return state.config.task.evaluators.filter(e => e.split === 'held_out').reduce((n, e) => n + e.timeoutSeconds, 0) * (state.config.task.selection.maxFinalists + 1);
 }
+function searchWallSeconds(state: State, now: number): number {
+  return (Date.parse(state.deadline) - now) / 1000 - finalizationSeconds(state) - state.config.budget.cancellationGraceSeconds;
+}
+function gradingSeconds(work: Work): number {
+  return Object.values(work.evaluationReservations ?? {}).reduce((sum, r) => sum + r.workSeconds, 0);
+}
+export function attemptWallSeconds(state: State, work: Work, now: number): number {
+  return searchWallSeconds(state, now) - gradingSeconds(work);
+}
+export function remainingAttemptReservation(state: State, work: Work, now: number): Resources {
+  const { available } = budgetView(state);
+  const tokens = Math.min(work.reservation.tokens, available.tokens);
+  const workSeconds = Math.min(work.reservation.workSeconds, available.workSeconds - gradingSeconds(work), attemptWallSeconds(state, work, now));
+  if (tokens < 1) throw new BudgetError('Insufficient tokens for another attempt');
+  if (workSeconds < 0.001) throw new BudgetError('Insufficient time for another attempt and its grading');
+  return { ...work.reservation, tokens, workSeconds };
+}
 export function admit(state: State, cost: Resources, phase: Work['phase'], now = Date.now()): void {
   const final = phase === 'held_out' || phase === 'report'; const view = budgetView(state, final);
   if (Object.values(state.works).some(w => w.state === 'unknown') || keys.some(k => view.unknown[k] > 0)) throw new BudgetError('Unresolved usage or work must be reconciled before scheduling');
   if (view.active >= state.config.budget.maxConcurrency) throw new BudgetError('Concurrency limit reached');
-  const remaining = (Date.parse(state.deadline) - now) / 1000;
-  const wallReserve = final ? 0 : finalizationSeconds(state) + state.config.budget.cancellationGraceSeconds;
-  if (remaining < cost.workSeconds + wallReserve) throw new BudgetError('Insufficient wall time for work and finalization');
+  const remaining = final ? (Date.parse(state.deadline) - now) / 1000 : searchWallSeconds(state, now);
+  if (cost.workSeconds > remaining + 1e-9) throw new BudgetError('Insufficient wall time for work and finalization');
   for (const key of keys) if (cost[key] > view.available[key] + 1e-9) throw new BudgetError(`Insufficient ${key}: needs ${cost[key]}, available ${view.available[key]}`);
 }
 export function actualUsage(work: Work, tokens: number | null, seconds: number): NonNullable<Work['actual']> {

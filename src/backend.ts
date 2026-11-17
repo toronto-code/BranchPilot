@@ -13,6 +13,7 @@ export interface BackendRequest {
   record: (kind: string, data: unknown, identity?: Partial<Pick<Work, 'sessionId' | 'commandId' | 'turnId'>>) => void;
 }
 export interface BackendResult {
+  usageSource?: 'provider_reported' | 'missing';
   outcome: 'completed' | 'failed' | 'cancelled' | 'unknown'; tokens: number | null;
   proposal: string; hypotheses: Hypothesis[]; receipt: unknown; stopped: boolean;
   answerSettled?: boolean;

@@ -9,6 +9,9 @@ import type { Config } from '../src/types.js';
 import { RunStore, hash } from '../src/store.js';
 import { runCli } from '../src/cli.js';
 import { setup } from './support.js';
+import { remainingAttemptReservation } from '../src/budget.js';
+import { runController } from '../src/controller.js';
+import { checkCancellation } from '../src/time.js';
 
 function planFor(t: TestContext, modify: (config: Config) => void = () => undefined) {
   const { root, config } = setup(t, 'retry', modify);
@@ -26,9 +29,12 @@ test('comparison versions share total allowances and differ in how attempts use 
   assert.equal(baseline.budget.wallSeconds, candidate.budget.wallSeconds);
   assert.deepEqual(baseline.agent.model, candidate.agent.model); assert.deepEqual(baseline.agent.effort, candidate.agent.effort);
   assert.equal(baseline.policy.mode, 'fixed'); assert.equal(candidate.policy.mode, 'auto');
-  assert.equal(baseline.agent.promptProfile, 'basic'); assert.equal(candidate.agent.promptProfile, 'evidence');
-  assert.equal(baseline.budget.perAttempt.tokenReservation, 3000); assert.equal(candidate.budget.perAttempt.tokenReservation, 1000);
-  assert.ok(baseline.budget.perAttempt.timeoutSeconds > candidate.budget.perAttempt.timeoutSeconds);
+  assert.equal(baseline.agent.promptProfile, 'basic'); assert.equal(candidate.agent.promptProfile, 'basic-first');
+  assert.equal(baseline.budget.perAttempt.tokenReservation, 3000); assert.equal(candidate.budget.perAttempt.tokenReservation, 3000);
+  assert.equal(baseline.budget.perAttempt.timeoutSeconds, candidate.budget.perAttempt.timeoutSeconds);
+  const historical = comparisonConfig(config, spec, 'new', 1);
+  assert.equal(historical.agent.promptProfile, 'evidence'); assert.equal(historical.budget.perAttempt.tokenReservation, 1000);
+  assert.ok(historical.budget.perAttempt.timeoutSeconds < candidate.budget.perAttempt.timeoutSeconds);
 });
 test('comparison schemas leave one-hour defaults and support an explicit five-minute pilot', () => {
   const base = { schemaVersion: 1, dataset: 'fixed', datasetRevision: 'commit', cases: [{ id: 'one', config: 'one.json' }] };
@@ -38,7 +44,7 @@ test('comparison schemas leave one-hour defaults and support an explicit five-mi
   assert.equal(comparisonSchema.parse({ ...base, armSeconds: 300, searchAttempts: 2 }).armSeconds, 300);
   assert.throws(() => comparisonSchema.parse({ ...base, armSeconds: 10 }), /exceed/);
   assert.throws(() => comparisonSchema.parse({ ...base, cases: [base.cases[0], base.cases[0]] }), /unique/);
-  assert.throws(() => comparisonSchema.parse({ ...base, taskTokens: 3, searchAttempts: 6 }), /reservations/);
+  assert.equal(comparisonSchema.parse({ ...base, taskTokens: 3, searchAttempts: 6 }).taskTokens, 3);
 });
 test('planning fingerprints sources without launching a backend or evaluator', t => {
   const { configFile, config, file, directory } = planFor(t);
@@ -90,7 +96,77 @@ test('fixture comparison runs both versions but cannot certify a model-quality g
   assert.equal(summary.totals.baseline!.tokens, 90); assert.equal(summary.totals.candidate!.tokens, 210);
   const baselineJob = JSON.parse(readFileSync(join(directory, 'default/job.json'), 'utf8'));
   const baseline = new RunStore(baselineJob.trials[0].runDirectory);
-  assert.equal(Object.values(baseline.state.works).filter(w => w.kind === 'attempt').length, 1);
+  const candidateJob = JSON.parse(readFileSync(join(directory, 'new/job.json'), 'utf8'));
+  const candidate = new RunStore(candidateJob.trials[0].runDirectory);
+  const direct = Object.values(baseline.state.works).filter(w => w.kind === 'attempt');
+  const search = Object.values(candidate.state.works).filter(w => w.kind === 'attempt');
+  assert.equal(direct.length, 1); assert.equal(search.length, 2);
+  assert.deepEqual(search[0]!.reservation, direct[0]!.reservation);
+  const prompt = (store: RunStore, intent: string) => store.getJSON<{ prompt: string }>(intent).prompt;
+  assert.equal(prompt(candidate, search[0]!.intent), prompt(baseline, direct[0]!.intent));
+  assert.equal(search[1]!.reservation.tokens, 3000 - search[0]!.actual!.tokens!);
+  assert.ok(JSON.parse(prompt(candidate, search[1]!.intent)).handoff.history.length);
+});
+
+test('a direct edit that needs more than an equal token slice completes in one turn in both arms', async t => {
+  const { file, directory } = planFor(t); prepareComparison(file, directory);
+  const reservations: number[] = [];
+  for (const arm of ['default', 'new'] as const) await runComparisonArm(directory, arm, { backend: {
+    execute: async request => {
+      reservations.push(request.work.reservation.tokens);
+      request.reportUsage!(1800);
+      if (!request.signal.aborted) writeFileSync(join(request.work.workspace, 'calculator.mjs'), 'export function add(a,b) { return a+b; }');
+      return { outcome: request.signal.aborted ? 'cancelled' : 'completed', stopped: true, tokens: 1800, proposal: '', hypotheses: [], receipt: {} };
+    },
+  } });
+  const summary = writeComparisonReport(directory);
+  assert.equal(summary.comparable, true);
+  assert.equal(summary.outcomes.baselineSolved, 1); assert.equal(summary.outcomes.candidateSolved, 1);
+  assert.deepEqual(reservations, [3000, 3000]);
+});
+
+test('remaining allocation protects development and final grading against both clocks', async t => {
+  const { store } = setup(t, 'repair', c => {
+    c.task.evaluators.push({ ...c.task.evaluators[0]!, id: 'final', split: 'held_out' });
+    c.budget.finalizationReserve = { tokens: 0, workSeconds: 10, attempts: 0, experiments: 2 };
+  });
+  await runController(store, { pauseAfter: 1 });
+  const state = structuredClone(store.state);
+  const previous = Object.values(state.works).find(w => w.kind === 'attempt')!;
+  const work = { ...previous, reservation: { ...previous.reservation, workSeconds: 1000, tokens: 3000 },
+    evaluationReservations: { dev: { tokens: 0, attempts: 0, experiments: 1, workSeconds: 10 } } };
+  state.config.budget.total.tokens = 3000; state.config.budget.total.workSeconds = 200;
+  const now = Date.parse(state.deadline) - 80_000;
+  const finalTime = state.config.budget.finalizationReserve.workSeconds;
+  const fromWall = remainingAttemptReservation(state, work, now);
+  assert.equal(fromWall.workSeconds, 80 - finalTime - state.config.budget.cancellationGraceSeconds - 10);
+  assert.equal(fromWall.tokens, 3000 - previous.actual!.tokens!);
+  previous.actual!.workSeconds = 150;
+  const spent = Object.values(state.works).reduce((s, w) => s + (w.actual?.workSeconds ?? 0), 0);
+  assert.equal(remainingAttemptReservation(state, work, now).workSeconds, 200 - spent - finalTime - 10);
+  assert.throws(() => remainingAttemptReservation(state, work, Date.parse(state.deadline)), /Insufficient time/);
+  state.config.budget.total.tokens = previous.actual!.tokens!;
+  assert.throws(() => remainingAttemptReservation(state, work, now), /Insufficient tokens/);
+});
+
+test('the backend deadline follows the admitted work seconds', async t => {
+  const { store } = setup(t, 'repair', c => {
+    c.budget.total.workSeconds = 20;
+    c.budget.perAttempt = { allocation: 'remaining', tokenReservation: 100, timeoutSeconds: 120 };
+  });
+  let cancelledAtReservation = false;
+  const state = await runController(store, { backend: { execute: async request => {
+    const seconds = request.work.reservation.workSeconds;
+    assert.ok(seconds > 0 && seconds <= 15);
+    const now = Date.now();
+    const clock = t.mock.method(Date, 'now', () => now + Math.ceil(seconds * 1000) + 1);
+    try { checkCancellation(request.signal); }
+    catch { cancelledAtReservation = String(request.signal.reason).includes('Attempt timeout'); }
+    finally { clock.mock.restore(); }
+    return { outcome: 'cancelled', stopped: true, tokens: 1, proposal: '', hypotheses: [], receipt: {} };
+  } } });
+  assert.equal(state.status, 'completed');
+  assert.equal(cancelledAtReservation, true);
 });
 test('a started version cannot replay after completion or an interrupted task record', async t => {
   const { file, directory } = planFor(t); prepareComparison(file, directory);

@@ -36,15 +36,15 @@ const approaches = {
 
 /** Controller-built summaries: no extra model call, no hidden evaluation data. */
 export function buildAttemptPrompt(state: State, base: Revision, plan: DevelopmentPlan, snapshot: (digest: string) => Snapshot): string {
-  // A one-attempt control for comparisons. Normal runs retain the evidence profile.
-  if (state.config.agent.promptProfile === 'basic') return JSON.stringify({
+  const profile = state.config.agent.promptProfile;
+  const attempts = Object.values(state.works).filter(w => w.kind === 'attempt' && w.state !== 'released');
+  if (profile === 'basic' || (profile === 'basic-first' && attempts.length === 0 && state.strategy.name === 'direct')) return JSON.stringify({
     goal: state.config.task.goal, type: state.config.task.type, constraints: state.config.task.constraints, objectives: state.config.task.objectives,
     proposal: base.proposal, hypotheses: base.hypotheses,
     developmentFeedback: resultsFor(state, base.id).map(e => ({ validity: e.validity, checks: e.checks, metrics: e.metrics, feedback: e.feedback, findings: e.findings })),
     instruction: plan.reason,
     rules: ['Work only inside the assigned workspace.', 'Do not change evaluators or launch detached processes or additional agents.'],
   });
-  const attempts = Object.values(state.works).filter(w => w.kind === 'attempt' && w.state !== 'released');
   const alternative = state.strategy.name === 'best-of-n' ? attempts.filter(w => w.epoch === state.epoch).length : attempts.filter(w => w.revisionId === base.id).length;
   const independent = state.strategy.name === 'best-of-n';
   const byId = new Map(state.revisions.map(r => [r.id, r]));

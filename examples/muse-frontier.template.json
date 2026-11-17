@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "agent": {
+    "promptProfile": "basic-first",
     "model": {
       "kind": "preference",
       "choices": [
@@ -37,6 +38,7 @@
     "wallSeconds": 10800,
     "maxConcurrency": 1,
     "perAttempt": {
+      "allocation": "remaining",
       "tokenReservation": 240000,
       "timeoutSeconds": 1800
     },

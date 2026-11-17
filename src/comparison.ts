@@ -15,23 +15,23 @@ import { verifyRun } from './project.js';
 import { capture, rejectNestedStorage } from './workspaces.js';
 import { atomicWrite, hash, id, RunStore } from './store.js';
 import { checkCancellation, combineSignals, wallDeadline } from './time.js';
+import type { Backend } from './backend.js';
 
 export const comparisonSchema = z.object({
   schemaVersion: z.literal(1), armSeconds: z.number().int().min(1).max(86400).default(3600),
   taskSeconds: z.number().int().min(1).max(3600).default(240),
-  taskTokens: z.number().int().min(3).max(10_000_000).default(24_000),
+  taskTokens: z.number().int().min(1).max(10_000_000).default(24_000),
   searchAttempts: z.number().int().min(2).max(6).default(3),
   dataset: z.string().min(1), datasetRevision: z.string().min(1),
   cases: z.array(z.object({ id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/), config: z.string().min(1) }).strict()).min(1).max(200),
 }).strict().superRefine((s, ctx) => {
   if (new Set(s.cases.map(c => c.id)).size !== s.cases.length) ctx.addIssue({ code: 'custom', message: 'Comparison case IDs must be unique' });
   if (s.cases.length * s.taskSeconds > s.armSeconds) ctx.addIssue({ code: 'custom', message: 'Planned task limits exceed the per-version wall budget' });
-  if (s.taskTokens < s.searchAttempts) ctx.addIssue({ code: 'custom', message: 'Token allowance cannot cover all search reservations' });
 });
 export type ComparisonSpec = z.infer<typeof comparisonSchema>;
 export type ComparisonArm = 'default' | 'new';
 interface SourceIdentity { input: string; evaluators: string[]; environment: string }
-interface Plan { schemaVersion: 1; id: string; createdAt: string; implementation: string; spec: ComparisonSpec; cases: { id: string; config: Config; identity: SourceIdentity }[] }
+interface Plan { schemaVersion: 1 | 2; id: string; createdAt: string; implementation: string; spec: ComparisonSpec; cases: { id: string; config: Config; identity: SourceIdentity }[] }
 interface TrialRecord { caseId: string; runDirectory?: string; seconds?: number; error?: string }
 interface ArmRecord { startedAt: string; deadline: string; finishedAt?: string; seconds?: number; trials: TrialRecord[] }
 
@@ -48,11 +48,15 @@ function writeJSON(file: string, value: unknown) { atomicWrite(file, JSON.string
 function readPlan(directory: string): Plan {
   const value = JSON.parse(readFileSync(join(directory, 'plan.json'), 'utf8')) as { plan: Plan; digest: string };
   if (hash(JSON.stringify(value.plan)) !== value.digest) throw Error('Comparison plan integrity check failed');
+  if (![1, 2].includes(value.plan.schemaVersion)) throw Error('Unsupported comparison plan version');
   comparisonSchema.parse(value.plan.spec);
   return value.plan;
 }
-export function comparisonConfig(config: Config, spec: ComparisonSpec, arm: ComparisonArm): Config {
-  const c = structuredClone(config); const attempts = arm === 'default' ? 1 : spec.searchAttempts;
+export function comparisonConfig(config: Config, spec: ComparisonSpec, arm: ComparisonArm, version: Plan['schemaVersion'] = 2): Config {
+  const c = structuredClone(config);
+  // Version 1 prepaid every possible retry. Preserve its exact settings when
+  // inspecting historical jobs. New jobs fund only the next attempt and grade.
+  const attempts = version === 1 && arm === 'new' ? spec.searchAttempts : 1;
   const development = c.task.evaluators.filter(e => e.split === 'development');
   const held = c.task.evaluators.filter(e => e.split === 'held_out');
   const heldSeconds = held.reduce((n, e) => n + e.timeoutSeconds, 0) * 2;
@@ -60,13 +64,14 @@ export function comparisonConfig(config: Config, spec: ComparisonSpec, arm: Comp
   const overhead = Math.max(1, Math.min(10, spec.taskSeconds * 0.05));
   const available = spec.taskSeconds - heldSeconds - developmentSeconds * (attempts + 1) - c.budget.cancellationGraceSeconds - overhead;
   if (available < attempts) throw Error(`Task ${c.task.key}: evaluation/setup limits leave insufficient time for ${attempts} attempt(s)`);
-  c.agent.promptProfile = arm === 'default' ? 'basic' : 'evidence';
+  c.agent.promptProfile = arm === 'default' ? 'basic' : version === 1 ? 'evidence' : 'basic-first';
   c.strategy = { name: 'direct' };
   c.policy = { mode: arm === 'default' ? 'fixed' : 'auto', ruleset: 'hackathon-v1', allowedStrategies: ['direct', 'retry', 'best-of-n', 'tree'] };
   c.task.selection = { ...c.task.selection, maxFinalists: 1, earlyStop: 'first_feasible' };
   c.budget = { ...c.budget, maxConcurrency: 1, wallSeconds: spec.taskSeconds,
     total: { tokens: spec.taskTokens, workSeconds: spec.taskSeconds, attempts: spec.searchAttempts, experiments: development.length * (spec.searchAttempts + 1) + held.length * 2 },
-    perAttempt: { tokenReservation: Math.floor(spec.taskTokens / attempts), timeoutSeconds: available / attempts },
+    perAttempt: { tokenReservation: Math.floor(spec.taskTokens / attempts), timeoutSeconds: available / attempts,
+      ...(arm === 'new' && version === 2 ? { allocation: 'remaining' as const } : {}) },
     finalizationReserve: { tokens: 0, attempts: 0, workSeconds: heldSeconds, experiments: held.length * 2 }, tokenLimitPolicy: 'cancel-at-reservation',
   };
   return configSchema.parse(c);
@@ -88,7 +93,7 @@ export function prepareComparison(file: string, directory: string): void {
   mkdirSync(dirname(directory), { recursive: true }); mkdirSync(directory);
   const assets = new RunStore(join(directory, 'source-records'), true);
   try {
-    const plan: Plan = { schemaVersion: 1, id: id(), createdAt: new Date().toISOString(), implementation: implementationDigest(), spec,
+    const plan: Plan = { schemaVersion: 2, id: id(), createdAt: new Date().toISOString(), implementation: implementationDigest(), spec,
       cases: configs.map((config, i) => ({ id: spec.cases[i]!.id, config, identity: identity(config, assets) })) };
     const taskIdentities = plan.cases.map(c => hash(JSON.stringify([c.identity.input, c.identity.evaluators, c.config.task.goal, c.config.task.constraints])));
     if (new Set(taskIdentities).size !== taskIdentities.length) throw Error('Repeated task content cannot be counted as independent comparison cases');
@@ -98,7 +103,7 @@ export function prepareComparison(file: string, directory: string): void {
 }
 
 /** Each version is one non-replayable job, with its own wall deadline and serial tasks. */
-export async function runComparisonArm(directory: string, arm: ComparisonArm, options: { signal?: AbortSignal; allowLive?: boolean; allowProviderCost?: boolean } = {}): Promise<void> {
+export async function runComparisonArm(directory: string, arm: ComparisonArm, options: { signal?: AbortSignal; allowLive?: boolean; allowProviderCost?: boolean; backend?: Backend } = {}): Promise<void> {
   if (!['default', 'new'].includes(arm)) throw Error('Choose default or new');
   directory = resolve(directory); const plan = readPlan(directory);
   if (plan.implementation !== implementationDigest()) throw Error('Implementation changed after planning; create a fresh comparison');
@@ -132,12 +137,12 @@ export async function runComparisonArm(directory: string, arm: ComparisonArm, op
       const taskDeadline = wallDeadline(Date.now() + plan.spec.taskSeconds * 1000, Error('Comparison task wall budget reached'));
       const taskSignal = combineSignals([signal, taskDeadline.signal]);
       try {
-        store = createRun(comparisonConfig(entry.config, plan.spec, arm), join(armDirectory, 'runs'));
+        store = createRun(comparisonConfig(entry.config, plan.spec, arm, plan.schemaVersion), join(armDirectory, 'runs'));
         trial.runDirectory = store.dir; writeJSON(file, job);
         const m = store.state.manifest;
         if (m.initialSnapshot !== entry.identity.input || JSON.stringify(m.evaluators.map(e => e.definitionDigest)) !== JSON.stringify(entry.identity.evaluators) || m.environment !== entry.identity.environment) throw Error('Task source changed between preflight and run creation');
         checkCancellation(taskSignal);
-        const state = await runController(store, { signal: taskSignal });
+        const state = await runController(store, { signal: taskSignal, backend: options.backend });
         if (state.status === 'needs_attention' || state.status === 'failed') trial.error = state.message ?? state.status;
         if (state.status === 'cancelled' || state.message?.startsWith('Assessment incomplete:')) trial.error = state.message ?? state.status;
         if (state.evaluations.some(e => e.failureType === 'timeout')) trial.error = 'Evaluator timed out; comparison execution stopped';
@@ -183,7 +188,7 @@ function inspectTrial(directory: string, plan: Plan, arm: ComparisonArm, entry: 
     if (dirname(resolve(record.runDirectory)) !== expectedParent) throw Error('Run is outside its comparison version');
     const store = new RunStore(record.runDirectory); verifyRun(store); state = store.state;
     if (record.error) reasons.push(record.error);
-    if (JSON.stringify(state.config) !== JSON.stringify(comparisonConfig(entry.config, plan.spec, arm))) reasons.push('Run configuration differs from the planned control');
+    if (JSON.stringify(state.config) !== JSON.stringify(comparisonConfig(entry.config, plan.spec, arm, plan.schemaVersion))) reasons.push('Run configuration differs from the planned control');
     const m = state.manifest;
     if (m.initialSnapshot !== entry.identity.input || m.environment !== entry.identity.environment || JSON.stringify(m.evaluators.map(e => e.definitionDigest)) !== JSON.stringify(entry.identity.evaluators)) reasons.push('Input/evaluator/environment mismatch');
     if (state.decisions.some(d => d.reason === 'Manual switch at a settled checkpoint')) reasons.push('Manual strategy intervention');
@@ -199,7 +204,7 @@ function inspectTrial(directory: string, plan: Plan, arm: ComparisonArm, entry: 
       const settings = attempts.map(w => w.agentSettings ? JSON.stringify([w.agentSettings.providerId, w.agentSettings.modelId, w.agentSettings.effort]) : undefined);
       if (!settings.length || settings.some(s => s === undefined) || new Set(settings).size !== 1) reasons.push('Missing or inconsistent confirmed model settings');
       else modelIdentity = settings[0];
-      if (attempts.some(w => w.usageSource !== 'host_reported')) reasons.push('Usage is not entirely host-reported');
+      if (attempts.some(w => !['host_reported', 'provider_reported'].includes(w.usageSource ?? 'missing'))) reasons.push('Usage is not entirely host- or provider-reported');
     } else modelIdentity = 'fixture';
   } catch (error) { reasons.push(String(error)); }
   return { caseId: entry.id, solved, reasons, seconds, spent, modelIdentity, backendIdentity };

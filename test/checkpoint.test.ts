@@ -41,6 +41,23 @@ test('a failed checkpoint feeds the next repair instead of discarding edits or r
   assert.equal(calls, 2); assert.equal(store.state.outcome, 'goal_met'); assert.equal(budgetView(store.state).spent.tokens, 140);
 });
 
+test('a stopped checkpoint with no file edit still uses the remaining automatic retry allowance', async t => {
+  const { store } = setup(t, 'auto', config => { config.budget.total.tokens = 1000; config.budget.perAttempt.tokenReservation = 100; config.task.selection.earlyStop = 'first_feasible'; });
+  let calls = 0;
+  await runController(store, { backend: { execute: async request => {
+    if (++calls === 1) {
+      request.reportUsage!(100);
+      return { outcome: 'cancelled', tokens: 100, stopped: true, proposal: '', hypotheses: [], receipt: {} };
+    }
+    assert.equal(request.work.index, 1);
+    writeFileSync(join(request.work.workspace, 'calculator.mjs'), 'export function add(a,b) { return a+b; }');
+    return { outcome: 'completed', tokens: 40, stopped: true, proposal: '', hypotheses: [], receipt: {} };
+  } } });
+  assert.equal(calls, 2); assert.equal(store.state.outcome, 'goal_met');
+  assert.equal(budgetView(store.state).spent.tokens, 140);
+  assert.equal(budgetView(store.state).spent.attempts, 2);
+});
+
 for (const condition of ['user-cancelled', 'missing-usage', 'not-stopped'] as const) test(`partial edits are not promoted when ${condition}`, async t => {
   const { store } = setup(t, 'repair'); const cancel = new AbortController();
   await runController(store, { signal: cancel.signal, backend: { execute: async request => {

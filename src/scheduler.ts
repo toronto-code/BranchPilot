@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
-import { actualUsage, add, admit, zero } from './budget.js';
+import { actualUsage, add, admit, attemptWallSeconds, remainingAttemptReservation, zero } from './budget.js';
 import { FixtureBackend } from './backend.js';
 import type { Backend, BackendAnswer, BackendOperation } from './backend.js';
 import { backendAnswerSchema, validateBackendAnswer } from './backend-input.js';
@@ -67,11 +67,15 @@ export class Scheduler {
       throw new InteractionRequired(String(error));
     }
   }
-  private reserve(work: Work, source?: { work: Work; evaluatorId: string }): void {
+  private reserve(work: Work, source?: { work: Work; evaluatorId: string }): Work {
     checkCancellation(this.signal);
     const state = this.store.state;
     if (work.kind === 'attempt' || state.manifest.evaluators.find(evaluator => evaluator.spec.id === work.evaluatorId)?.spec.kind === 'executable') this.verifyEnvironment();
     if (work.kind === 'attempt') this.verifyBackend();
+    const now = Date.now();
+    if (work.kind === 'attempt' && state.config.budget.perAttempt.allocation === 'remaining') {
+      work = { ...work, reservation: remainingAttemptReservation(state, work, now) };
+    }
     const cost = { ...work.reservation };
     for (const reservation of Object.values(work.evaluationReservations ?? {})) add(cost, reservation);
     let parent: Work | undefined;
@@ -81,9 +85,10 @@ export class Scheduler {
       delete parent.evaluationReservations![source.evaluatorId];
       admission = { ...state, works: { ...state.works, [parent.id]: parent } };
     }
-    admit(admission, cost, work.phase);
+    admit(admission, cost, work.phase, now);
     if (work.resourceGroup && Object.values(state.works).some(w => w.resourceGroup === work.resourceGroup && ['reserved', 'running', 'unknown'].includes(w.state))) throw Error(`Resource group is occupied: ${work.resourceGroup}`);
     this.store.append(...(parent ? [{ type: 'work.updated' as const, work: parent }] : []), { type: 'work.reserved', work });
+    return work;
   }
   releaseEvaluations(revision: Revision): void {
     const work = revision.attemptId ? this.store.state.works[revision.attemptId] : undefined;
@@ -172,8 +177,7 @@ export class Scheduler {
     const index = Object.values(state.works).filter(w => w.kind === 'attempt' && w.state !== 'released').length;
     const prompt = buildAttemptPrompt(state, base, plan, digest => this.store.getJSON(digest));
     let work: Work = { id: workId, kind: 'attempt', phase: 'search', revisionId: base.id, candidateId, reservation: { tokens: state.config.budget.perAttempt.tokenReservation, workSeconds: state.config.budget.perAttempt.timeoutSeconds, attempts: 1, experiments: 0 }, state: 'reserved', outputRevisionId: id(), preparedAt: new Date().toISOString(), evaluationReservations: Object.fromEntries(state.manifest.evaluators.filter(e => e.spec.split === 'development').map(e => [e.spec.id, { ...zero(), experiments: 1, workSeconds: e.spec.kind === 'human_preference' ? 0 : e.spec.timeoutSeconds }])), intent: this.store.putJSON({ prompt, baseRevisionId: base.id, candidateId, index, retry: Boolean(plan.candidateId) }), workspace: join(this.store.dir, 'workspaces', workId), index, epoch: state.epoch };
-    this.reserve(work);
-    return work;
+    return this.reserve(work);
   }
   async executePrepared(prepared: Work): Promise<Revision | undefined> {
     const state = this.store.state;
@@ -189,7 +193,10 @@ export class Scheduler {
     const onAbort = () => controller.abort(this.signal.reason);
     this.signal.addEventListener('abort', onAbort, { once: true });
     if (this.signal.aborted) onAbort();
-    const timeout = wallDeadline(Date.now() + state.config.budget.perAttempt.timeoutSeconds * 1000, Error('Attempt timeout'));
+    const began = Date.parse(work.startedAt!);
+    const seconds = state.config.budget.perAttempt.allocation === 'remaining'
+      ? Math.min(work.reservation.workSeconds, attemptWallSeconds(state, work, began)) : work.reservation.workSeconds;
+    const timeout = wallDeadline(began + seconds * 1000, Error('Attempt timeout'));
     const onTimeout = () => controller.abort(timeout.signal.reason);
     timeout.signal.addEventListener('abort', onTimeout, { once: true });
     if (timeout.signal.aborted) onTimeout();
@@ -210,7 +217,7 @@ export class Scheduler {
       if (result.observedTokens !== undefined) actualUsage(work, result.observedTokens, 0);
       const observedTokens = Math.max(work.observedTokens ?? 0, result.tokens ?? 0, result.observedTokens ?? 0);
       if (actual.tokens !== null && actual.tokens < observedTokens) actual.tokens = null;
-      const usageSource = actual.tokens === null ? 'missing' : state.config.backend.kind === 'fixture' ? 'fixture' : 'host_reported';
+      const usageSource = actual.tokens === null ? 'missing' : result.usageSource ?? (state.config.backend.kind === 'fixture' ? 'fixture' : 'host_reported');
       work = { ...work, actual, usageSource, receipt, observedTokens };
       if (!result.stopped || result.outcome === 'unknown') {
         work = { ...work, state: 'unknown', outcome: 'unknown', actual, usageSource, receipt };

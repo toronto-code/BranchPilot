@@ -1,6 +1,21 @@
 # Credit-funded public subset rerun — November 13, 2026
 
-Status: live comparison in progress. No outcome or quality claim is established by this plan record.
+Status checked November 16: stopped on November 13 after a provider connection failure. The comparison is incomplete and noncomparable; no model-quality gain is established.
+
+| Recorded result | Direct baseline | BranchPilot |
+|---|---:|---:|
+| Solved / all 12 planned tasks | 11/12 | 4/12 recorded |
+| Tasks started | 12 | 7 |
+| Elapsed seconds | 781.452 | 337.126 |
+| Complete host token total | 2,349,617 | Unknown |
+
+BranchPilot solved `say`, `book-store`, `pig-latin`, and `zebra-puzzle`. `scale-generator` and `robot-name` were unsolved; `killer-sudoku-helper` was interrupted. The remaining five tasks were not started. All planned tasks remain in the denominator, and the saved paired statistics cannot establish a quality conclusion for this incomplete experiment.
+
+Provider request 332 received HTTP 200 headers but its stream ended with `TypeError: terminated` before terminal usage. A concurrent model-catalog request also failed. The campaign stopped immediately and retained the full US$7 reserve; headers alone do not establish completion or a zero charge. The saved provider response ID is `resp_6af798e71d9d3a58d9664439`.
+
+The fresh run made 127 model requests: 126 settled at a conservative US$13.500916 total, and request 332 remains unknown. Historical request 205 also retains its original reserve. Projected cash was zero under the evidenced credit allowance at the time of the run; this is not a current provider invoice. The credit/conversion policy expired November 14 at 03:00 UTC. No new model requests were made during the November 16 status check, and neither historical job was replayed.
+
+Saved evidence: `.branchpilot/public-polyglot-credits-2026-11-13/comparison/summary.json`, both arm `job.json` files, `gateway.json`, the run log and `.branchpilot/live-campaign-credits-2026-11-13.json`.
 
 The user supplied a current billing screenshot showing **$143.46 free credits in use** and **CA$0.00 outstanding**. Earlier budget reports incorrectly treated conservative nominal API usage as cash spending. The revised guard tracks nominal usage and projected cash separately while preserving the CAD $50 out-of-pocket campaign cap.
 

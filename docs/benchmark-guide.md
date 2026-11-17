@@ -6,6 +6,8 @@ Keep the same explicit model and effort in both versions. Authentication, compat
 
 ## Current spending authorization
 
+The [November 16 recovery repair](results/recovery-fix-2026-11-16.md) adds stored-response billing recovery and per-attempt provider reconciliation. All 262 release tests passed. A fresh authenticated billing check showed $139.57 free credits active and CA$0.00 outstanding; the renewed policy retains a conservative CAD $100 credit allowance, all charges/reserves, and the CAD $50 cash cap.
+
 The [November 13 failure review](results/benchmark-failure-repair-2026-11-13.md) explains the interrupted public run, the repaired deadline/dispatch defects, and the unsuccessful read-only recovery of its missing provider usage. All 253 local release tests passed; no fresh live benchmark has validated the repairs.
 
 The [November 13 local rebenchmark](results/rebenchmark-2026-11-13.md) completed nine fixture trials and fresh controller/reuse measurements. All expected outcomes passed. Its initial spending block was based on incorrectly treating nominal usage as cash spending; the user subsequently supplied current free-credit evidence.
@@ -16,7 +18,7 @@ Billing is **Meta API pay-as-you-go**. Use the explicit live-catalog identity fo
 
 **Live-pilot guard:** `src/muse-gateway.ts` reserves US$7 before each supported Wonder request and verifies catalog prices/limits. That reserve covers the maximum supported uncached text request; it is not the campaign's authorized budget. The original US$40 ledger remains unchanged. A version-2 credit-funded ledger carries forward all 205 entries and their digest, with an aggregate US$80 usage ceiling. The CAD policy subtracts only a conservative CAD $100 credit allowance backed by the user's current screenshot. Even the full US$80 nominal ceiling, converted at CAD 1.75/USD, projects at most CAD $40 cash after that allowance. Counting old credited usage again makes this conservative. The credit and conversion evidence expires November 14 at 03:00 UTC.
 
-Only historical unknown request 205 is explicitly retained without blocking fresh work: its full US$7 remains counted, its frozen entry cannot change, and it is never replayed. Any new unknown or pending request blocks admission and stops the live run. Hosted tools, other models, remote continuations, and premium tiers are refused. These controls cover the benchmark gateway, not arbitrary Muse use or concurrent account activity. The credit allowance relies on the current balance evidence and must be reverified before renewal. Meta documents its dashboard spend limit as an email alert, not a hard usage cap. [Meta's spend-limit explanation](https://dev.meta.ai/help/billing/spend-limit-alert).
+Historical unknown requests 205 and 332 are explicitly retained without blocking the separate fresh comparison: their full US$14 remains counted, their frozen entries cannot change, and neither is replayed. Every new request must settle; a new unknown blocks admission and stops the live run. The benchmark drains and reconciles provider work after each owned host closes, before another task starts. Hosted tools, other models, remote continuations, and premium tiers are refused. These controls cover the benchmark gateway, not arbitrary Muse use or concurrent account activity. The credit allowance relies on the current balance evidence and must be reverified before renewal. Meta documents its dashboard spend limit as an email alert, not a hard usage cap. [Meta's spend-limit explanation](https://dev.meta.ai/help/billing/spend-limit-alert).
 
 Run the read-only preflight without credentials or provider calls:
 
@@ -54,7 +56,7 @@ HumanEval+/MBPP+ can be a quick correctness smoke check, but they exercise funct
 Both versions use the same task inputs, development and final tests, exact model ID and effort, environment, total token allowance, total wall allowance, and concurrency one. A Muse comparison requires explicit provider/model/effort rather than dynamic preferences, so entitlement changes cannot silently switch the model. Choose the verified Wonder Full identity for both if available; otherwise explicitly choose Wonder for both.
 
 - **Default:** one direct Muse attempt, basic task/evaluation prompt, no search. It can use the task's full model-token allowance and remaining attempt time. The common adapter supplies isolation, recording, and external grading; this is not a measurement of the standalone Muse CLI's defaults.
-- **New:** automatic BranchPilot search with evidence handoffs. The default maximum is three attempts, sharing the same total allowance. Each reserves one-third of the task token allowance and a smaller time slice. Passing development checks stop further search; final grading remains separate.
+- **BranchPilot** starts with the same direct prompt and first-turn ceilings. After a development failure it can use feedback and the remaining tokens and time for another attempt. Each admission protects the next development grade and final assessment. Passing development checks stop search. The default maximum is three attempts in total.
 
 The comparison is the full controller treatment, not an ablation of one individual feature. It cannot tell you whether handoff text, retrying, or search-policy changes caused a gain. Model changes must be evaluated separately.
 

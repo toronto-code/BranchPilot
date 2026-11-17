@@ -52,7 +52,7 @@ export const configSchema = z.object({
     z.object({ kind: z.literal('muse'), binary: z.string(), compatibilityLock: z.string(), apiKeyEnv: z.literal('META_API_KEY').optional() }).strict(),
   ]),
   agent: z.object({
-    promptProfile: z.enum(['basic', 'evidence']).optional(),
+    promptProfile: z.enum(['basic', 'evidence', 'basic-first']).optional(),
     model: z.discriminatedUnion('kind', [
       z.object({ kind: z.literal('host-default') }).strict(),
       z.object({ kind: z.literal('explicit'), providerId: z.string().min(1), modelId: z.string().min(1) }).strict(),
@@ -68,7 +68,10 @@ export const configSchema = z.object({
   policy: z.object({ mode: z.enum(['fixed', 'auto']), ruleset: z.literal('hackathon-v1').default('hackathon-v1'), allowedStrategies: z.array(z.enum(['direct', 'retry', 'best-of-n', 'tree'])).min(1) }).strict().default({ mode: 'fixed', ruleset: 'hackathon-v1', allowedStrategies: ['direct', 'retry', 'best-of-n', 'tree'] }),
   budget: z.object({
     total: resourcesSchema, wallSeconds: positive.refine(seconds => Number.isFinite(new Date(Date.now() + seconds * 1000).getTime()), 'Wall deadline exceeds the supported date range'), maxConcurrency: count.min(1).max(16).default(1),
-    perAttempt: z.object({ tokenReservation: count.min(1), timeoutSeconds: positive.max(MAX_TIMEOUT_MS / 1000) }).strict(),
+    perAttempt: z.object({
+      tokenReservation: count.min(1), timeoutSeconds: positive.max(MAX_TIMEOUT_MS / 1000),
+      allocation: z.enum(['fixed', 'remaining']).optional(),
+    }).strict(),
     finalizationReserve: resourcesSchema.default({ tokens: 0, workSeconds: 0, attempts: 0, experiments: 0 }),
     cancellationGraceSeconds: positive.max(60).default(2), missingUsage: z.literal('hold-reservation-and-pause').default('hold-reservation-and-pause'),
     tokenLimitPolicy: z.enum(['cancel-at-reservation', 'observe']).default('cancel-at-reservation'),

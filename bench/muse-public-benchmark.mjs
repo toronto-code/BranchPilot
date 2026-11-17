@@ -10,6 +10,8 @@ import { prepareComparison, runComparisonArm, writeComparisonReport } from '../d
 import { hash } from '../dist/src/store.js';
 import { verifyLiveMuseEvidence } from './muse-live-evidence.mjs';
 import { REVISION, SEED } from './prepare-polyglot.mjs';
+import { MuseBackend } from '../dist/src/muse.js';
+import { withMuseProviderUsage } from '../dist/src/muse-provider-usage.js';
 
 const { values: args } = parseArgs({ options: Object.fromEntries(['binary', 'home', 'prepared', 'evidence', 'out', 'ledger', 'budget', 'key-file'].map(k => [k, { type: 'string' }]).concat([['allow-provider-cost', { type: 'boolean' }]])) });
 for (const k of ['binary', 'home', 'prepared', 'evidence', 'out', 'ledger', 'budget']) if (!args[k]) throw Error(`--${k} is required`);
@@ -33,9 +35,10 @@ const priorKey = process.env.META_API_KEY;
 const preparationDigest = hash(readFileSync(manifestFile));
 mkdirSync(out);
 const controller = new AbortController(); const stop = () => controller.abort(Error('Benchmark interrupted by process signal'));
-const gateway = await startMuseGateway({ key, ledgerFile: resolve(args.ledger), limitUsd: readMuseSpendLedger(resolve(args.ledger)).limitUsd, cadBudget, signal: controller.signal,
+const gateway = await startMuseGateway({ key, ledgerFile: resolve(args.ledger), limitUsd: readMuseSpendLedger(resolve(args.ledger)).limitUsd, cadBudget, recoverResponses: true, signal: controller.signal,
   onUnknown: id => controller.abort(Error(`Provider request ${id} has unknown billing; campaign stopped`)) });
 const beforeCampaign = gateway.ledger.snapshot();
+const backend = withMuseProviderUsage(new MuseBackend(), gateway);
 process.on('SIGINT', stop); process.on('SIGTERM', stop);
 let awake; let closing = false;
 const accounting = { beforeCampaign, cadBudget, arms: {}, preparation: manifestFile, preparationDigest, codeDigests };
@@ -88,7 +91,7 @@ try {
     for (const [p, digest] of Object.entries(codeDigests)) if (hash(readFileSync(new URL(p, import.meta.url))) !== digest) throw Error('Benchmark adapter changed during the comparison');
     const firstEntry = gateway.ledger.snapshot().entries.length;
     console.log(`Starting ${arm}: 12 frozen Aider Polyglot JavaScript tasks; Wonder max; one-hour ceiling.`);
-    await runComparisonArm(comparison, arm, { signal: controller.signal, allowLive: true, allowProviderCost: true });
+    await runComparisonArm(comparison, arm, { signal: controller.signal, allowLive: true, allowProviderCost: true, backend });
     await settle();
     const report = writeComparisonReport(comparison); const job = JSON.parse(readFileSync(join(comparison, arm, 'job.json'), 'utf8'));
     const entries = gateway.ledger.snapshot().entries.slice(firstEntry);

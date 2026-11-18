@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "agent": {
-    "promptProfile": "basic-first",
+    "promptProfile": "code-verification",
     "model": {
       "kind": "preference",
       "choices": [

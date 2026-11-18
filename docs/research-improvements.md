@@ -29,7 +29,7 @@ When Full is absent, the explicitly listed Wonder choice is allowed and its fall
 
 Settings must apply and pass readback before work begins. Confirmed provider/model/effort and selection reasons are persisted per attempt and shown in reports. Recovery retains the original confirmed selection rather than resolving a new preference. This policy applies to every attempt in the configured run: it does not use a speculative difficulty classifier or delegate implementation to a cheaper model.
 
-The frontier template starts with a direct coding prompt and supplies a development handoff on subsequent attempts. It allows up to four sequential attempts and 960,000 total tokens. Each attempt can use up to 240,000 tokens and 30 minutes, subject to the remaining task and grading budgets. Token accounting includes the full session, and delayed usage reports can overshoot an allocation. [Frontier configuration](../examples/muse-frontier.template.json)
+The frontier template asks Muse to make a working edit early and use local checks to verify public task requirements. Subsequent attempts also get a development handoff. It allows up to four sequential attempts and 960,000 total tokens. Each attempt can use up to 240,000 tokens and 30 minutes, subject to the remaining task and grading budgets. Token accounting includes the full session, and delayed usage reports can overshoot an allocation. [Frontier configuration](../examples/muse-frontier.template.json)
 
 ## Related work and decisions
 

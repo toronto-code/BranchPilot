@@ -27,7 +27,7 @@ npm run build
 node bench/campaign-budget.mjs --ledger .branchpilot/live-campaign-credits-2026-11-13.json --budget .branchpilot/campaign-budget-credits-2026-11-13.json
 ```
 
-It prints gross nominal costs, the credit allowance, projected cash, retained liabilities and admission status; exit code 1 means no new request is admissible. The original [budget preflight report](results/campaign-budget-2026-11-13.md) contains the superseded pre-credit calculation.
+It prints nominal headroom, the credit allowance, projected cash, retained liabilities and admission status. Exit code 1 means no new request is admissible. The original [budget preflight report](results/campaign-budget-2026-11-13.md) contains the superseded pre-credit calculation.
 
 The policy's remaining fields are `schemaVersion: 1`, `currency: "CAD"`, `limitCad: 50`, `ledgerFile` (relative to the policy file), `priorEntries` and `priorEntriesSha256`. Build the last two from the existing `readMuseSpendLedger(ledgerFile).entries` using its length and `campaignHistoryDigest(entries)` from `src/campaign-budget.ts`. Store it separately from the historical ledger. Renewing a conversion assumption must preserve that history; resolving an unknown entry requires provider evidence and an explicitly updated policy digest.
 
@@ -56,13 +56,31 @@ HumanEval+/MBPP+ can be a quick correctness smoke check, but they exercise funct
 Both versions use the same task inputs, development and final tests, exact model ID and effort, environment, total token allowance, total wall allowance, and concurrency one. A Muse comparison requires explicit provider/model/effort rather than dynamic preferences, so entitlement changes cannot silently switch the model. Choose the verified Wonder Full identity for both if available; otherwise explicitly choose Wonder for both.
 
 - **Default:** one direct Muse attempt, basic task/evaluation prompt, no search. It can use the task's full model-token allowance and remaining attempt time. The common adapter supplies isolation, recording, and external grading; this is not a measurement of the standalone Muse CLI's defaults.
-- **BranchPilot** starts with the same direct prompt and first-turn ceilings. After a development failure it can use feedback and the remaining tokens and time for another attempt. Each admission protects the next development grade and final assessment. Passing development checks stop search. The default maximum is three attempts in total.
+- **BranchPilot** starts with the same first-turn ceilings. The generic runner uses the same direct prompt by default. The public adapter freezes `candidatePrompt: "code-verification"` in its plan. That profile puts a working edit early, groups development results by verdict, and asks Muse to check a representative example and boundary case from the public task. After a development failure, BranchPilot can use feedback and the remaining tokens and time for another attempt. Each admission protects the next development grade and final assessment. Passing development checks stop search. The default maximum is three attempts in total.
 
 The comparison is the full controller treatment, not an ablation of one individual feature. It cannot tell you whether handoff text, retrying, or search-policy changes caused a gain. Model changes must be evaluated separately.
+
+The machine-readable summary records each first attempt's outcome, captured-edit status, time and tokens, along with whether development selected a finalist. This distinguishes a turn that ended before saving an edit from a candidate that passed development and failed final grading.
+
+Newly prepared Polyglot suites run Jest in UTC and report a verdict for each named development test after Jest executes the complete development split. The runner freezes the upstream data files that file-oriented exercises need. Automatic retries can restore an earlier checkpoint that passed every check the latest edit passed and at least one additional check. The aggregate correctness gate requires every selected assertion to pass. Existing preparations use their frozen grader.
 
 Set aside final tests that neither version can read or use during search. For public benchmark adapters, preserve reference grading and clearly document any development-test split or protocol change; custom budgets/subsets and changed feedback rules are not directly comparable to official leaderboard scores. Do not weaken tests, remove failed cases, or select the next subset after looking at which tasks BranchPilot solves.
 
 Choose all task IDs, the dataset revision, and the limits before starting. A reproducible selection method is to hash a recorded seed plus each eligible task ID, sort the hashes, and take the first N. Verify dependencies and the reference grader before freezing that pool. Exclude a task for documented infrastructure incompatibility before seeing model results, never because one version fails it.
+
+Prepare a disjoint Polyglot sample from the pinned checkout and runtime with a new seed. The manifest records the selected cases and exclusions. The JavaScript `ledger` exercise asks for a refactor and its starter passes the full official suite, so a correctness-only comparison cannot score that task.
+
+```sh
+node bench/prepare-polyglot.mjs \
+  --dataset .branchpilot/datasets/polyglot-benchmark \
+  --runtime .branchpilot/toolchains/polyglot/runtime.tgz \
+  --exclude-prepared .branchpilot/polyglot-prepared-1 \
+  --seed branchpilot-polyglot-js-2026-11-18-verify-v1 \
+  --out .branchpilot/polyglot-final-2026-11-18
+node bench/verify-polyglot.mjs --prepared .branchpilot/polyglot-final-2026-11-18
+```
+
+Preparation and OS isolation checks make no provider calls. `--exclude-prepared` can be repeated for prior preparations, and `--count` supports 1–14 cases within the one-hour arm limit. Twelve cases are a pilot. If direct Muse again solves ten, even a perfect candidate run can produce at most two paired wins on that sample.
 
 ## Runner already implemented
 

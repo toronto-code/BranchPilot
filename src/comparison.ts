@@ -22,6 +22,7 @@ export const comparisonSchema = z.object({
   taskSeconds: z.number().int().min(1).max(3600).default(240),
   taskTokens: z.number().int().min(1).max(10_000_000).default(24_000),
   searchAttempts: z.number().int().min(2).max(6).default(3),
+  candidatePrompt: z.literal('code-verification').optional(),
   dataset: z.string().min(1), datasetRevision: z.string().min(1),
   cases: z.array(z.object({ id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/), config: z.string().min(1) }).strict()).min(1).max(200),
 }).strict().superRefine((s, ctx) => {
@@ -64,7 +65,7 @@ export function comparisonConfig(config: Config, spec: ComparisonSpec, arm: Comp
   const overhead = Math.max(1, Math.min(10, spec.taskSeconds * 0.05));
   const available = spec.taskSeconds - heldSeconds - developmentSeconds * (attempts + 1) - c.budget.cancellationGraceSeconds - overhead;
   if (available < attempts) throw Error(`Task ${c.task.key}: evaluation/setup limits leave insufficient time for ${attempts} attempt(s)`);
-  c.agent.promptProfile = arm === 'default' ? 'basic' : version === 1 ? 'evidence' : 'basic-first';
+  c.agent.promptProfile = arm === 'default' ? 'basic' : version === 1 ? 'evidence' : spec.candidatePrompt ?? 'basic-first';
   c.strategy = { name: 'direct' };
   c.policy = { mode: arm === 'default' ? 'fixed' : 'auto', ruleset: 'hackathon-v1', allowedStrategies: ['direct', 'retry', 'best-of-n', 'tree'] };
   c.task.selection = { ...c.task.selection, maxFinalists: 1, earlyStop: 'first_feasible' };
@@ -181,6 +182,8 @@ export function pairedOutcomeSummary(pairs: { baseline: boolean; candidate: bool
 function inspectTrial(directory: string, plan: Plan, arm: ComparisonArm, entry: Plan['cases'][number], record?: TrialRecord) {
   const reasons: string[] = []; let state: State | undefined; let spent: Resources | undefined;
   let solved = false; let modelIdentity: string | undefined; let backendIdentity: string | undefined;
+  let developmentPassed: boolean | undefined;
+  let firstAttempt: { outcome: State['works'][string]['outcome']; capturedEdit: boolean; tokens?: number | null; workSeconds?: number | null } | undefined;
   const seconds = record?.seconds;
   try {
     if (!record?.runDirectory || seconds === undefined) throw Error('Task not completed');
@@ -200,6 +203,10 @@ function inspectTrial(directory: string, plan: Plan, arm: ComparisonArm, entry: 
     solved = state.status === 'completed' && Boolean(state.finalists?.length) && state.finalists!.every(r => feasible(state!.config, [...resultsFor(state!, r), ...resultsFor(state!, r, 'held_out')], { final: true }));
     backendIdentity = hash(JSON.stringify(m.backend));
     const attempts = Object.values(state.works).filter(w => w.kind === 'attempt' && w.state !== 'released');
+    developmentPassed = Boolean(state.finalists?.length);
+    const first = attempts[0];
+    if (first) firstAttempt = { outcome: first.outcome, tokens: first.actual?.tokens, workSeconds: first.actual?.workSeconds,
+      capturedEdit: state.revisions.some(r => r.attemptId === first.id && r.snapshot !== m.initialSnapshot) };
     if (state.config.backend.kind === 'muse') {
       const settings = attempts.map(w => w.agentSettings ? JSON.stringify([w.agentSettings.providerId, w.agentSettings.modelId, w.agentSettings.effort]) : undefined);
       if (!settings.length || settings.some(s => s === undefined) || new Set(settings).size !== 1) reasons.push('Missing or inconsistent confirmed model settings');
@@ -207,7 +214,7 @@ function inspectTrial(directory: string, plan: Plan, arm: ComparisonArm, entry: 
       if (attempts.some(w => !['host_reported', 'provider_reported'].includes(w.usageSource ?? 'missing'))) reasons.push('Usage is not entirely host- or provider-reported');
     } else modelIdentity = 'fixture';
   } catch (error) { reasons.push(String(error)); }
-  return { caseId: entry.id, solved, reasons, seconds, spent, modelIdentity, backendIdentity };
+  return { caseId: entry.id, solved, reasons, seconds, spent, modelIdentity, backendIdentity, developmentPassed, firstAttempt };
 }
 
 export function writeComparisonReport(directory: string) {
@@ -239,12 +246,14 @@ export function writeComparisonReport(directory: string) {
   }));
   const summary = { schemaVersion: 1, planId: plan.id, dataset: plan.spec.dataset, datasetRevision: plan.spec.datasetRevision, simulated,
     armSeconds: plan.spec.armSeconds, taskSeconds: plan.spec.taskSeconds, implementation: plan.implementation,
+    candidatePrompt: plan.schemaVersion === 1 ? 'evidence' : plan.spec.candidatePrompt ?? 'basic-first',
     outcomes, totals, comparable: reasons.length === 0, modelQualityImproved: improved,
     verdict: improved ? 'evidence_of_improvement_on_this_frozen_subset' : 'improvement_not_established',
     qualityReasons, pairs, note: 'A small selected subset is a pilot, not a full benchmark score. Repeat on a fresh frozen subset; do not tune on final tests. Statistical evidence does not establish universal superiority.' };
   writeJSON(join(directory, 'summary.json'), summary);
   atomicWrite(join(directory, 'summary.md'), ['# Paired benchmark comparison', '', `Dataset: ${plan.spec.dataset} @ ${plan.spec.datasetRevision}`, '',
     `Mode: ${simulated ? 'OFFLINE FIXTURES — not model quality' : 'Muse runs'}. Budget: ${plan.spec.armSeconds}s per version, ${plan.spec.taskSeconds}s per task.`, '',
+    `Candidate prompt: ${summary.candidatePrompt}.`, '',
     `Verdict: **${summary.verdict}**`, '', `Default solved ${outcomes.baselineSolved}/${outcomes.tasks}; new solved ${outcomes.candidateSolved}/${outcomes.tasks}. Wins ${outcomes.wins}, losses ${outcomes.losses}, ties ${outcomes.ties}. Paired two-sided p=${outcomes.exactTwoSidedP.toFixed(4)}.`, '',
     '| Task | Default solved | New solved | Comparison valid |', '|---|---|---|---|',
     ...pairs.map(p => `| ${p.caseId} | ${p.baseline.solved} | ${p.candidate.solved} | ${p.reasons.length ? 'no' : 'yes'} |`), '',

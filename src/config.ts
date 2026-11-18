@@ -52,7 +52,7 @@ export const configSchema = z.object({
     z.object({ kind: z.literal('muse'), binary: z.string(), compatibilityLock: z.string(), apiKeyEnv: z.literal('META_API_KEY').optional() }).strict(),
   ]),
   agent: z.object({
-    promptProfile: z.enum(['basic', 'evidence', 'basic-first']).optional(),
+    promptProfile: z.enum(['basic', 'evidence', 'basic-first', 'code-verification']).optional(),
     model: z.discriminatedUnion('kind', [
       z.object({ kind: z.literal('host-default') }).strict(),
       z.object({ kind: z.literal('explicit'), providerId: z.string().min(1), modelId: z.string().min(1) }).strict(),
@@ -84,6 +84,7 @@ export const configSchema = z.object({
   }).strict(),
 }).strict().superRefine((c, ctx) => {
   const problem = (message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+  if (c.agent.promptProfile === 'code-verification' && c.task.type !== 'code') problem('The code-verification prompt requires a code task');
   const ids = new Set(c.task.evaluators.map(e => e.id));
   if (ids.size !== c.task.evaluators.length) problem('Evaluator IDs must be unique');
   for (const evaluator of c.task.evaluators) if (evaluator.reuseIdentical && (evaluator.kind !== 'executable' || evaluator.role !== 'correctness' || evaluator.split !== 'development')) problem('Identical-result reuse is only supported for deterministic executable development correctness checks');

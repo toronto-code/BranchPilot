@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, readdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { sandboxCommand, runProcess } from '../dist/src/process.js';
 import { hash } from '../dist/src/store.js';
@@ -25,7 +25,8 @@ for (const task of manifest.cases) {
     writeFileSync(file, JSON.stringify(manifest, null, 2));
     if (!passed) throw Error(`Isolated grader failed ${task.id}/${kind}/${split}: ${result.stderr.slice(-3000)} ${result.stdout.slice(-1500)}`);
   }
-  const files = readdirSync(task.assets, { recursive: true }).filter(p => !p.endsWith('/') && p !== 'tests');
+  const files = readdirSync(task.assets, { recursive: true, withFileTypes: true })
+    .filter(entry => entry.isFile()).map(entry => relative(task.assets, join(entry.parentPath, entry.name))).sort();
   task.assetDigests = Object.fromEntries(files.map(p => [p, hash(readFileSync(join(task.assets, p)))]));
   console.log(`${task.id}: real OS-isolated reference/development/final checks passed.`);
 }

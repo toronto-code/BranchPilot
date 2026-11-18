@@ -36,6 +36,14 @@ export function readMuseSpendLedger(file: string): Ledger {
   return ledger;
 }
 
+export function inspectMuseSpendLimit(ledger: Ledger) {
+  const micros = Math.floor(ledger.limitUsd * 1_000_000) - ledger.entries.reduce((spent, entry) => {
+    const committed = entry.state === 'settled' ? entry.chargedUsd! : entry.reservedUsd;
+    return spent + Math.round(committed * 1_000_000);
+  }, 0);
+  return { nominalLimitUsd: ledger.limitUsd, nominalRemainingUsd: Math.max(0, micros) / 1_000_000, canReserveNominal: micros >= RESERVATION_USD * 1_000_000 };
+}
+
 export class MuseSpendLedger {
   private ledger: Ledger;
   private readonly lock: string;
@@ -61,8 +69,7 @@ export class MuseSpendLedger {
   reserve(): number {
     if (this.cadBudget) assertMuseCadAdmission(this.cadBudget, this.ledger.entries);
     if (this.blockingUnsettled().length) throw Error('Unsettled provider work blocks further paid requests');
-    const committed = this.ledger.entries.reduce((n, e) => n + (e.chargedUsd ?? e.reservedUsd), 0);
-    if (committed + RESERVATION_USD > this.ledger.limitUsd) throw Error('Campaign spending allowance cannot cover another request');
+    if (!inspectMuseSpendLimit(this.ledger).canReserveNominal) throw Error('Campaign spending allowance cannot cover another request');
     const id = this.ledger.entries.length + 1;
     this.ledger.entries.push({ id, state: 'reserved', reservedUsd: RESERVATION_USD, reservedAt: new Date().toISOString() }); this.save(); return id;
   }

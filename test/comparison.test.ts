@@ -92,6 +92,9 @@ test('fixture comparison runs both versions but cannot certify a model-quality g
   const summary = writeComparisonReport(directory);
   assert.equal(summary.comparable, true); assert.equal(summary.outcomes.wins, 1); assert.equal(summary.outcomes.losses, 0);
   assert.equal(summary.outcomes.baselineSolved, 0); assert.equal(summary.outcomes.candidateSolved, 1);
+  assert.equal(summary.pairs[0]!.baseline.developmentPassed, false);
+  assert.equal(summary.pairs[0]!.candidate.developmentPassed, true);
+  assert.equal(summary.pairs[0]!.candidate.firstAttempt?.tokens, 90);
   assert.equal(summary.modelQualityImproved, false); assert.match(summary.qualityReasons.join(' '), /Fixture/);
   assert.equal(summary.totals.baseline!.tokens, 90); assert.equal(summary.totals.candidate!.tokens, 210);
   const baselineJob = JSON.parse(readFileSync(join(directory, 'default/job.json'), 'utf8'));
@@ -123,6 +126,29 @@ test('a direct edit that needs more than an equal token slice completes in one t
   assert.equal(summary.comparable, true);
   assert.equal(summary.outcomes.baselineSolved, 1); assert.equal(summary.outcomes.candidateSolved, 1);
   assert.deepEqual(reservations, [3000, 3000]);
+});
+
+test('a frozen comparison can opt into code verification with the same first-turn limits', async t => {
+  const { file, spec, directory } = planFor(t);
+  writeFileSync(file, JSON.stringify({ ...spec, candidatePrompt: 'code-verification' }));
+  prepareComparison(file, directory);
+  for (const arm of ['default', 'new'] as const) await runComparisonArm(directory, arm);
+  const firstAttempt = (arm: string) => {
+    const job = JSON.parse(readFileSync(join(directory, arm, 'job.json'), 'utf8'));
+    const store = new RunStore(job.trials[0].runDirectory);
+    const work = Object.values(store.state.works).find(w => w.kind === 'attempt')!;
+    return { reservation: work.reservation, prompt: JSON.parse(store.getJSON<{ prompt: string }>(work.intent).prompt) };
+  };
+  const baseline = firstAttempt('default'); const candidate = firstAttempt('new');
+  assert.deepEqual(baseline.reservation, candidate.reservation);
+  assert.equal(baseline.prompt.goal, candidate.prompt.goal);
+  assert.ok(candidate.prompt.rules.some((rule: string) => rule.includes('boundary case')));
+  assert.deepEqual(candidate.prompt.developmentFeedback[0].failedChecks, ['addition']);
+  assert.equal(baseline.prompt.developmentFeedback[0].checks[0].id, 'addition');
+  const summary = writeComparisonReport(directory);
+  assert.equal(summary.candidatePrompt, 'code-verification');
+  assert.equal(summary.comparable, true);
+  assert.equal(summary.modelQualityImproved, false);
 });
 
 test('remaining allocation protects development and final grading against both clocks', async t => {

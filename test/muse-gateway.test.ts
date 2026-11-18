@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MuseSpendLedger, validateMusePaidRequest, verifyMusePricing, startMuseGateway } from '../src/muse-gateway.js';
+import { inspectMuseSpendLimit, MuseSpendLedger, validateMusePaidRequest, verifyMusePricing, startMuseGateway } from '../src/muse-gateway.js';
 
 test('spending admission reserves before dispatch and refuses concurrent requests', t => {
   const root = mkdtempSync(join(tmpdir(), 'muse-spend-'));
@@ -12,6 +12,7 @@ test('spending admission reserves before dispatch and refuses concurrent request
   assert.throws(() => ledger.reserve(), /Unsettled/);
   ledger.settle(id, { input_tokens: 1_000_000, output_tokens: 100_000 });
   assert.equal(ledger.snapshot().entries[0]!.chargedUsd, 6);
+  assert.deepEqual(inspectMuseSpendLimit(ledger.snapshot()), { nominalLimitUsd: 10, nominalRemainingUsd: 4, canReserveNominal: false });
   assert.throws(() => ledger.reserve(), /allowance/);
 });
 

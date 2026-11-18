@@ -1,7 +1,56 @@
-import type { State, Strategy } from './types.js';
+import type { Revision, State, Strategy } from './types.js';
 import { feasible, frontier, resultsFor } from './evaluation.js';
 
-export interface DevelopmentPlan { baseId: string; candidateId?: string; reason: string }
+export interface DevelopmentPlan { baseId: string; candidateId?: string; regressedRevisionId?: string; reason: string }
+
+// Compare only complete, like-for-like development verdicts. Missing checks,
+// metrics and human judgments do not give a revision a correctness ranking.
+function strongerRetryBase(state: State, latest: Revision): Revision {
+  const task = state.config.task;
+  if (state.config.policy.mode !== 'auto' || task.type !== 'code' || task.objectives.length ||
+      task.constraints.some(c => c.kind !== 'check') || !latest.parentIds.length) return latest;
+  const evaluators = state.manifest.evaluators.filter(e => e.spec.split === 'development');
+  if (evaluators.some(e => e.spec.kind !== 'executable' || e.spec.role !== 'correctness')) return latest;
+
+  function verdicts(revision: Revision) {
+    const rows = resultsFor(state, revision.id);
+    const checks = new Map<string, boolean>();
+    for (const evaluator of evaluators) {
+      const row = rows.find(e => e.evaluatorId === evaluator.spec.id);
+      if (!row || row.environmentDigest !== state.manifest.environment || row.definitionDigest !== evaluator.definitionDigest ||
+          !['pass', 'fail'].includes(row.validity) || (row.failureType && row.failureType !== 'correctness') ||
+          row.metrics.length || row.checks.some(c => c.outcome === 'unknown')) return;
+      // A whole-suite verdict may cover additional assertions beyond named checks.
+      checks.set(JSON.stringify([row.evaluatorId]), row.validity === 'pass');
+      for (const check of row.checks) checks.set(JSON.stringify([row.evaluatorId, check.id]), check.outcome === 'pass');
+    }
+    return checks;
+  }
+
+  let best = latest;
+  const latestChecks = verdicts(latest);
+  if (!latestChecks) return latest;
+  const byId = new Map(state.revisions.map(r => [r.id, r]));
+  const checkpoints = new Set(state.revisions.filter(r => r.id !== latest.id && r.candidateId === latest.candidateId).reverse());
+  const seen = new Set([latest.id]);
+  for (let parent = byId.get(latest.parentIds[0]!); parent && !seen.has(parent.id); parent = byId.get(parent.parentIds[0]!)) {
+    seen.add(parent.id);
+    checkpoints.add(parent);
+  }
+  let bestGains = 0;
+  for (const checkpoint of checkpoints) {
+    const checks = verdicts(checkpoint);
+    if (!checks || checks.size !== latestChecks.size) continue;
+    let gained = 0, comparable = true;
+    for (const [id, passed] of latestChecks) {
+      const previous = checks.get(id);
+      if (previous === undefined || (passed && !previous)) { comparable = false; break; }
+      if (previous && !passed) gained++;
+    }
+    if (comparable && gained > bestGains) { best = checkpoint; bestGains = gained; }
+  }
+  return best;
+}
 /** Pure proposal functions; no IO or resource allocation. All counters survive switches. */
 export function nextPlan(state: State): DevelopmentPlan | undefined {
   if (state.finalists || !state.baselineId) return;
@@ -16,6 +65,9 @@ export function nextPlan(state: State): DevelopmentPlan | undefined {
       const root = state.revisions.filter(r => r.candidateId === candidateId).at(-1) ?? state.revisions.find(r => r.id === (previousAttempt?.revisionId ?? state.baselineId))!;
       const count = candidateId ? attempts.filter(a => a.candidateId === candidateId).length : 0;
       if (count >= strategy.maxAttemptsPerCandidate || (root.candidateId === candidateId && state.config.task.type === 'code' && feasible(state.config, resultsFor(state, root.id)))) return;
+      const best = strongerRetryBase(state, root);
+      if (best !== root) return { baseId: best.id, candidateId, regressedRevisionId: root.id,
+        reason: `Resume checkpoint ${best.id} after ${root.id} lost previously passing development checks and gained none. Preserve those passing behaviors while repairing the remaining failures.` };
       return { baseId: root.id, candidateId, reason: 'Continue the candidate with structured development feedback' };
     }
     case 'best-of-n': return current.length >= strategy.n ? undefined : { baseId: state.baselineId, reason: `Independent alternative ${current.length + 1}/${strategy.n} from the shared baseline` };

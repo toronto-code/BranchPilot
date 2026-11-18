@@ -9,7 +9,7 @@ import { museBenchmarkSettings } from '../dist/src/muse-environment.js';
 import { prepareComparison, runComparisonArm, writeComparisonReport } from '../dist/src/comparison.js';
 import { hash } from '../dist/src/store.js';
 import { verifyLiveMuseEvidence } from './muse-live-evidence.mjs';
-import { REVISION, SEED } from './prepare-polyglot.mjs';
+import { REVISION, selectPolyglotTasks } from './prepare-polyglot.mjs';
 import { MuseBackend } from '../dist/src/muse.js';
 import { withMuseProviderUsage } from '../dist/src/muse-provider-usage.js';
 
@@ -21,8 +21,9 @@ assertMuseCadAdmission(cadBudget, readMuseSpendLedger(resolve(args.ledger)).entr
 const binary = resolve(args.binary), home = resolve(args.home), evidence = resolve(args.evidence), out = resolve(args.out);
 if (existsSync(out)) throw Error('Use a fresh output directory; started jobs are never replayed');
 const manifestFile = join(resolve(args.prepared), 'manifest.json'); const manifest = JSON.parse(readFileSync(manifestFile, 'utf8'));
-if (!manifest.validated || !manifest.sandboxPreflight?.passed || manifest.revision !== REVISION || manifest.seed !== SEED || manifest.cases.length !== 12) throw Error('Prepare and validate the frozen 12-task suite first');
-if (JSON.stringify(manifest.selected) !== JSON.stringify(manifest.cases.map(c => c.id))) throw Error('Case list changed');
+if (!manifest.validated || !manifest.sandboxPreflight?.passed || manifest.revision !== REVISION || !manifest.seed) throw Error('Prepare and validate a frozen Polyglot suite first');
+const selection = selectPolyglotTasks(manifest.pool, { seed: manifest.seed, count: manifest.cases.length, excluded: manifest.excluded });
+if (JSON.stringify(selection) !== JSON.stringify(manifest.selected) || JSON.stringify(selection) !== JSON.stringify(manifest.cases.map(c => c.id))) throw Error('Case selection changed');
 const codeFiles = ['muse-public-benchmark.mjs', 'muse-live-evidence.mjs', 'prepare-polyglot.mjs', 'polyglot-grader.mjs'];
 const codeDigests = Object.fromEntries(codeFiles.map(p => [p, hash(readFileSync(new URL(p, import.meta.url)))]));
 for (const task of manifest.cases) for (const [path, digest] of Object.entries(task.assetDigests ?? {})) if (hash(readFileSync(join(task.assets, path))) !== digest) throw Error(`Prepared asset changed: ${task.id}/${path}`);
@@ -82,7 +83,7 @@ try {
     config.budget.cancellationGraceSeconds = 3;
     const file = join(out, 'configs', task.id + '.json'); writeFileSync(file, JSON.stringify(config, null, 2)); cases.push({ id: task.id, config: file });
   }
-  const spec = { schemaVersion: 1, dataset: 'aider-polyglot-javascript-12', datasetRevision: `${REVISION}:${SEED}`, armSeconds: 3600, taskSeconds: 240, taskTokens: 360000, searchAttempts: 3, cases };
+  const spec = { schemaVersion: 1, dataset: `aider-polyglot-javascript-${cases.length}`, datasetRevision: `${REVISION}:${manifest.seed}`, armSeconds: 3600, taskSeconds: 240, taskTokens: 360000, searchAttempts: 3, candidatePrompt: 'code-verification', cases };
   const specFile = join(out, 'suite.json'); writeFileSync(specFile, JSON.stringify(spec, null, 2));
   const comparison = join(out, 'comparison'); prepareComparison(specFile, comparison);
   writeFileSync(join(out, 'accounting.json'), JSON.stringify(accounting, null, 2));
@@ -90,7 +91,7 @@ try {
     controller.signal.throwIfAborted();
     for (const [p, digest] of Object.entries(codeDigests)) if (hash(readFileSync(new URL(p, import.meta.url))) !== digest) throw Error('Benchmark adapter changed during the comparison');
     const firstEntry = gateway.ledger.snapshot().entries.length;
-    console.log(`Starting ${arm}: 12 frozen Aider Polyglot JavaScript tasks; Wonder max; one-hour ceiling.`);
+    console.log(`Starting ${arm}: ${cases.length} frozen Aider Polyglot JavaScript tasks; Wonder max; one-hour ceiling.`);
     await runComparisonArm(comparison, arm, { signal: controller.signal, allowLive: true, allowProviderCost: true, backend });
     await settle();
     const report = writeComparisonReport(comparison); const job = JSON.parse(readFileSync(join(comparison, arm, 'job.json'), 'utf8'));
